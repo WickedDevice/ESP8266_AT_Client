@@ -8,7 +8,7 @@ Stream * ESP8266_AT_Client::debugStream = NULL;
 boolean ESP8266_AT_Client::debug_echo_everything_enable = false;
 
 ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin){
-  this->stream = NULL;
+  this->stream = &Serial; // default assumption
   this->socket_connected = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;  
