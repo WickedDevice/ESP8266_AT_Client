@@ -81,6 +81,14 @@ void ESP8266_AT_Client::setInputBuffer(uint8_t * buf, uint32_t buf_length){
   this->input_buffer_tail_ptr = &(buf[buf_length-1]);     
 }
 
+int ESP8266_AT_Client::connect(IPAddress ip){
+  return connect(ip, 80);
+}
+
+int ESP8266_AT_Client::connect(const char *host){
+  return connect(host, 80);
+}
+
 /** Connect to server by IP address
 	@param ip       the IP address to connect to
 	@param port     the port to connect to

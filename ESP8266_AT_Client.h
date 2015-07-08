@@ -27,6 +27,9 @@ public:
   
   int connect(IPAddress ip, uint16_t port);
   int connect(const char *host, uint16_t port);
+  int connect(IPAddress ip);
+  int connect(const char *host);
+  
   size_t write(uint8_t);
   size_t write(const uint8_t *buf, size_t size);
   int available();
