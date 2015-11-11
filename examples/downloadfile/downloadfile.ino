@@ -146,7 +146,7 @@ uint16_t downloadFile(char * hostname, uint16_t port, char * filename, void (*re
       lastRead = millis();
     }
   }
-  
+    
   www.stop();
   
   if(responseBodyProcessor != 0){
