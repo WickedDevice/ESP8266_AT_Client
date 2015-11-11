@@ -90,6 +90,11 @@ uint16_t downloadFile(char * hostname, uint16_t port, char * filename, void (*re
       num_bytes_read = esp.read(mybuffer, 255);
       num_chunks++;
       
+
+      if((num_chunks % 5) == 0){
+        Serial.print(".");
+      }      
+      
       for(uint32_t ii = 0 ; ii < num_bytes_read; ii++){
          if(parsing_state != PARSING_FOUND_CRNLCRNL){
            num_header_bytes++;

@@ -40,6 +40,7 @@ public:
   void flush();
   void stop();
   uint8_t connected();
+  uint8_t connectedToNetwork();
   operator bool();
   
   static boolean addStringToList(char list[][ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1], char * str, uint8_t max_num_entries);

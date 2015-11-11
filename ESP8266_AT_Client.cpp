@@ -121,12 +121,14 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port){
   stream->print(120); // keep alive interval in units of "0.5 second intervals" (i.e. 1 minute)
   stream->print("\r\n");  
   
-  // ESP8266 responds with either "OK", "ERROR", or "ALREADY CONNECT"  
-  static char target_match_array[4][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
+  // ESP8266 responds with either "OK", "ERROR", or "ALREADY CONNECT" 
+  const uint8_t num_match_strings = 3;
+  const uint8_t match_vector_length = num_match_strings + 1; // includes null entry
+  static char target_match_array[match_vector_length][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
   uint8_t match_index = 0xFF;
-  ESP8266_AT_Client::addStringToList(target_match_array, "OK", 4);
-  ESP8266_AT_Client::addStringToList(target_match_array, "ERROR", 4);
-  ESP8266_AT_Client::addStringToList(target_match_array, "ALREADY CONNECT", 4);
+  ESP8266_AT_Client::addStringToList(target_match_array, "OK", match_vector_length);
+  ESP8266_AT_Client::addStringToList(target_match_array, "ERROR", match_vector_length);
+  ESP8266_AT_Client::addStringToList(target_match_array, "ALREADY CONNECT", match_vector_length);
   if(readStreamUntil(target_match_array, &match_index)){
      if(match_index == 0){ // got "OK"     
        ESP8266_AT_Client::DEBUG("TCPConnect Connected");     
@@ -276,10 +278,12 @@ void ESP8266_AT_Client::stop(){
     stream->print("\r\n");   
     
     // ESP8266 responds with either "OK", "ERROR"
-    char target_match_array[3][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
-    uint8_t match_index = 0xFF;
-    ESP8266_AT_Client::addStringToList(target_match_array, "CLOSED", 3);
-    ESP8266_AT_Client::addStringToList(target_match_array, "ERROR", 3);
+    const uint8_t num_match_strings = 2;
+    const uint8_t match_vector_length = num_match_strings + 1; // includes null entry    
+    char target_match_array[match_vector_length][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
+    uint8_t match_index = 0xFF;    
+    ESP8266_AT_Client::addStringToList(target_match_array, "CLOSED", match_vector_length);
+    ESP8266_AT_Client::addStringToList(target_match_array, "ERROR", match_vector_length);
     if(readStreamUntil(target_match_array, &match_index, 5000)){
        if(match_index == 0){ // got "CLOSED"
          ESP8266_AT_Client::DEBUG("TCPClose Succeeded");
@@ -304,35 +308,65 @@ uint8_t ESP8266_AT_Client::connected(){
     // set up an AT command and send it
     // then return whether or not it succeeded
 
-    char target_match_array[3][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
+    const uint8_t num_match_strings = 3;
+    const uint8_t match_vector_length = num_match_strings + 1; // includes null entry 
+    char target_match_array[match_vector_length][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
     uint8_t match_index = 0xFF;
-    ESP8266_AT_Client::addStringToList(target_match_array, "+CIPSTATUS:", 3);
-    ESP8266_AT_Client::addStringToList(target_match_array, "OK\r\n", 3);  
+    ESP8266_AT_Client::addStringToList(target_match_array, "STATUS:3", match_vector_length); // connected
+    ESP8266_AT_Client::addStringToList(target_match_array, "STATUS:4", match_vector_length); // disconnected
+    ESP8266_AT_Client::addStringToList(target_match_array, "OK\r\n", match_vector_length);  
         
     flushInput();
     stream->print("AT+CIPSTATUS");
     stream->print("\r\n");
   
-    // then you have to get "+CIPSTATUS:"
+    // you have to get "STATUS:" and a numeric code
+    // then you have *may* get "+CIPSTATUS:"
     // then you get "OK" 
-    // if you're connected
   
     if(readStreamUntil(target_match_array, &match_index, 100)){    
-      if(match_index == 0){ // got "+CIPSTATUS:"
+      if(match_index == 0 || match_index == 1){ // STATUS:3 or STATUS:4, 2 is also possible but not handled
+        if(match_index == 1){
+          socket_connected = false;
+          ret = 0;
+        }                                   
+        else{
+          ret = 1; 
+        }
+        
         if(readStreamUntil(target_match_array, &match_index, 100)){
-          if(match_index == 1){ // got "OK"
-            ret = 1;  
-          }
-        }        
-      }
-      else{ 
-        socket_connected = false;
+          if(match_index != 2){ //  != "OK"
+             ESP8266_AT_Client::DEBUG("CIPSTATUS not OK");
+          }          
+        }
+      }      
+      else{         
         ret = 0;
       }
     }
   }
   
   return ret;
+}
+
+uint8_t ESP8266_AT_Client::connectedToNetwork(void){
+  uint8_t ret = 0;
+  const uint8_t num_match_strings = 3;
+  const uint8_t match_vector_length = num_match_strings + 1; // includes null entry   
+  char target_match_array[match_vector_length][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
+  uint8_t match_index = 0xFF;
+  ESP8266_AT_Client::addStringToList(target_match_array, "+CWJAP:", match_vector_length); // connected
+  ESP8266_AT_Client::addStringToList(target_match_array, "No AP", match_vector_length); // disconnected
+  ESP8266_AT_Client::addStringToList(target_match_array, "OK\r\n", match_vector_length);    
+  
+  stream->print("AT+CWJAP_CUR?");
+  stream->print("\r\n");  
+  
+  if(readStreamUntil(target_match_array, &match_index, 100)){   
+  
+  }
+  
+  return ret;  
 }
 
 ESP8266_AT_Client::operator bool(){
@@ -346,7 +380,7 @@ ESP8266_AT_Client::operator bool(){
 	@param max_num_entries 
 	@return returns true if the item is successfully added and false otherwise
  */
-boolean ESP8266_AT_Client::addStringToList(char list[][ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1], char * str, uint8_t max_num_entries){
+boolean ESP8266_AT_Client::addStringToList(char list[][ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1], char * str, uint8_t match_vector_length){
   uint16_t free_index = 0xFFFF;
   
   if(strlen(str) <= ESP8266_AT_CLIENT_MAX_STRING_LENGTH){
@@ -354,7 +388,7 @@ boolean ESP8266_AT_Client::addStringToList(char list[][ESP8266_AT_CLIENT_MAX_STR
     // search the list for an empty space
     // the last empty space must remain empty
     // so don't include it in the search
-    for(uint16_t ii = 0; ii < (max_num_entries - 1); ii++){      
+    for(uint16_t ii = 0; ii < (match_vector_length - 1); ii++){      
       uint16_t len = strlen(list[ii]);  
       if(0 == len){
         free_index = ii;
@@ -362,13 +396,13 @@ boolean ESP8266_AT_Client::addStringToList(char list[][ESP8266_AT_CLIENT_MAX_STR
       }
     }
         
-    // free index is the firs empty space in the list
+    // free index is the first empty space in the list
     // or 0xFFFF if no free entries were found
     
     // if free index points to a viable position
     // then copy the candidate string into that position
     // and limit the number of characters copied
-    if(free_index < (max_num_entries - 1)){         
+    if(free_index < (match_vector_length - 1)){         
       char * tgt_addr = list[free_index];
       memcpy(tgt_addr, 0, ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1); // fill with NULLs
       strncpy(tgt_addr, str, ESP8266_AT_CLIENT_MAX_STRING_LENGTH);  // copy the string in      
@@ -467,14 +501,16 @@ boolean ESP8266_AT_Client::readStreamUntil(char target_match[][ESP8266_AT_CLIENT
 // pass a single string to match against
 // the string must not be longer than 31 characters
 boolean ESP8266_AT_Client::readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){  
-  char target_match_array[2][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};
+  const uint8_t num_match_strings = 1;
+  const uint8_t match_vector_length = num_match_strings + 1; // includes null entry   
+  char target_match_array[match_vector_length][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
   uint8_t dummy_return;
   
   if(strlen(target_match) > 31){
     return false; 
   }
   else{
-    ESP8266_AT_Client::addStringToList(target_match_array, target_match, 2);
+    ESP8266_AT_Client::addStringToList(target_match_array, target_match, match_vector_length);
     return readStreamUntil(target_match_array, &dummy_return, target_buffer, target_buffer_length, timeout_ms);
   }
 }
@@ -604,10 +640,12 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
   stream->print("\r\n");    
 
   // ESP8266 responds with either "OK", "ERROR"
-  char target_match_array[3][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
+  const uint8_t num_match_strings = 2;
+  const uint8_t match_vector_length = num_match_strings + 1; // includes null entry     
+  char target_match_array[match_vector_length][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
   uint8_t match_index = 0xFF;
-  ESP8266_AT_Client::addStringToList(target_match_array, "OK", 3);
-  ESP8266_AT_Client::addStringToList(target_match_array, "ERROR", 3);
+  ESP8266_AT_Client::addStringToList(target_match_array, "OK", match_vector_length);
+  ESP8266_AT_Client::addStringToList(target_match_array, "ERROR", match_vector_length);
   
   if(readStreamUntil(target_match_array, &match_index)){
      if(match_index == 0){
@@ -616,7 +654,7 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
      }  
      else{
        ESP8266_AT_Client::DEBUG("Debug: NetworkMode Failed");
-       ret = false;      
+       ret = false;
      }     
   }
   
@@ -686,7 +724,9 @@ boolean ESP8266_AT_Client::disconnectFromNetwork(){
 // the last reason (sync error) is really bad news - you should probably force close the socket and start over
 uint8_t ESP8266_AT_Client::receive(int32_t timeout){
   uint8_t ret = 0;
-  static char target_match_array[4][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};    
+  const uint8_t num_match_strings = 3;
+  const uint8_t match_vector_length = num_match_strings + 1; // includes null entry       
+  static char target_match_array[match_vector_length][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};    
   uint8_t match_index = 0xFF;
   static uint32_t num_characters_remaining_to_receive = 0;
   boolean ongoing_processing = false;
@@ -695,9 +735,9 @@ uint8_t ESP8266_AT_Client::receive(int32_t timeout){
     ESP8266_AT_Client::DEBUG("Receive continuation.");         
   }
   
-  ESP8266_AT_Client::addStringToList(target_match_array, "+IPD,", 4);
-  ESP8266_AT_Client::addStringToList(target_match_array, "CLOSED", 4);
-  ESP8266_AT_Client::addStringToList(target_match_array, "OK", 4);
+  ESP8266_AT_Client::addStringToList(target_match_array, "+IPD,", match_vector_length);
+  ESP8266_AT_Client::addStringToList(target_match_array, "CLOSED", match_vector_length);
+  ESP8266_AT_Client::addStringToList(target_match_array, "OK", match_vector_length);
   while(ret == 0){
     static char tmp[32] = {0};
     uint32_t num_characters_expected = 0;        
@@ -713,7 +753,7 @@ uint8_t ESP8266_AT_Client::receive(int32_t timeout){
             ESP8266_AT_Client::DEBUG("Got '+IPD,'");
           }
           
-          if(ongoing_processing || readStreamUntil(":", (char *) tmp, 31, 10)){            
+          if(ongoing_processing || readStreamUntil(":", (char *) tmp, 31, -1)){ // can't allow timeout here
             if(!ongoing_processing){
               ESP8266_AT_Client::DEBUG("Got ':'");                      
               // response buffer tells us how many bytes we expect to receive in this chunk
@@ -749,7 +789,7 @@ uint8_t ESP8266_AT_Client::receive(int32_t timeout){
             }                            
               
             ESP8266_AT_Client::DEBUG("Receiving: ", num_characters_expected);                      
-            if(readStream(num_characters_expected, 5000)){
+            if(readStream(num_characters_expected, 5000)){ // this only times out if *no characters* are received for 5 seconds
                ret = 1; // expected number of characters was received
                if(num_characters_remaining_to_receive == 0){
                  // wait for "OK"               
@@ -778,7 +818,7 @@ uint8_t ESP8266_AT_Client::receive(int32_t timeout){
             }          
           }
           else{         
-             ESP8266_AT_Client::DEBUG("Receive Error, ':' missing");        
+             ESP8266_AT_Client::DEBUG("Receive Error, ':' missing or otherwise timeout");        
              ret = 4; // parse error
           }
           break;
