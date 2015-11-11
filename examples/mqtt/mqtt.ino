@@ -25,7 +25,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 uint8_t server[4] = {192, 168, 1, 7}; // i.e. 192.168.1.7
-PubSubClient client(server, 1883, callback, esp);
+PubSubClient mqtt_client(server, 1883, callback, esp);
 
 #define ESP8266_INPUT_BUFFER_SIZE (1500)
 uint8_t input_buffer[ESP8266_INPUT_BUFFER_SIZE] = {0};     // sketch must instantiate a buffer to hold incoming data
@@ -39,12 +39,16 @@ void setup(void){
   esp.setInputBuffer(input_buffer, ESP8266_INPUT_BUFFER_SIZE); // connect the input buffer up
   esp.reset();                                                 // reset the module
   
+  Serial.print("Set Network to Station...");
+  esp.setNetworkMode(1);
+  Serial.println("OK");   
+  
   Serial.print("Connecting to Network...");  
   esp.connectToNetwork(NETWORK_SSID, NETWORK_PASSWORD, 60000, NULL); // connect to the network
   Serial.println("OK");  
   
-  if (client.connect("arduinoClient")) {       // connect to the MQTT server
-    client.publish("outTopic","hello world");  // publish a hello world message to outTopic
+  if (mqtt_client.connect("arduinoClient")) {       // connect to the MQTT server
+    mqtt_client.publish("outTopic","hello world");  // publish a hello world message to outTopic
   }  
 }
 
@@ -54,13 +58,14 @@ const long interval = 1000;
 void loop(void){
   unsigned long currentMillis = millis();
   
-  if(!client.loop()){
+  if(!mqtt_client.loop()){
     // reconnect if necessary
     Serial.print(millis());
     Serial.print(" reconnecting...");
     esp.reset();
+    esp.setNetworkMode(1);
     esp.connectToNetwork(NETWORK_SSID, NETWORK_PASSWORD, 60000, NULL);    
-    if(client.connect("arduinoClient")){  
+    if(mqtt_client.connect("arduinoClient")){  
       Serial.println("OK");  
     }
     else{
@@ -75,7 +80,7 @@ void loop(void){
     snprintf(temp, 31, "%lu", millis());
     if(currentMillis - previousMillis >= interval) {
       previousMillis = currentMillis;     
-      client.publish("outTopic", temp);
+      mqtt_client.publish("outTopic", temp);
     }
   }
   

@@ -20,6 +20,7 @@ public:
   void setStream(Stream * stream);
   void setInputBuffer(uint8_t * buf, uint32_t buf_length);
   
+  boolean setNetworkMode(uint8_t mode);
   boolean connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms, void (*onConnect)(void));
   boolean disconnectFromNetwork(void);
   boolean reset(void);

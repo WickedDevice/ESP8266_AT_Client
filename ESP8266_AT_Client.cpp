@@ -40,8 +40,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_
   this->enable_pin = enable_pin;    
 }
 
-boolean ESP8266_AT_Client::reset(void){
-  
+boolean ESP8266_AT_Client::reset(void){  
    // reset the buffer state pointers
    this->input_buffer_read_ptr = this->input_buffer;
    this->input_buffer_write_ptr = this->input_buffer;
@@ -110,7 +109,7 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port){
   // set up an AT command and send it
   // then return whether or not it succeeded
   int ret = 2; // initialize to error
-  this->socket_connected = false;  
+  socket_connected = false;  
   ESP8266_AT_Client::DEBUG("Connecting to ", (char *) host);
   
   flushInput();
@@ -144,8 +143,8 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port){
   }
   
   if(ret == 1){
-    this->socket_connected = true;
-  }
+    socket_connected = true;
+  } 
   
   return ret;
 }
@@ -166,7 +165,7 @@ size_t ESP8266_AT_Client::write(uint8_t c){
  */
 size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   size_t ret = 0;
-  
+
   flushInput();
   stream->print("AT+CIPSEND=");
   stream->print(sz);
@@ -188,7 +187,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
  */
 int ESP8266_AT_Client::available(){
   // an intent to read() is always preceded by a call to available(),
-  // if the call knows what is good for them,
+  // if the caller knows what is good for them,
   // so this is where we need to perform the receive 
   // in a synchronous manner (with timeout)
   
@@ -593,6 +592,38 @@ void ESP8266_AT_Client::flushInput(){
   }
 }
 
+// 1 is Station Mode
+// 2 is SoftAP Mode
+// 3 is SoftAP + Station Mode
+boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
+  boolean ret = false;
+  
+  flushInput();  
+  stream->print("AT+CWMODE_CUR=");
+  stream->print(mode);
+  stream->print("\r\n");    
+
+  // ESP8266 responds with either "OK", "ERROR"
+  char target_match_array[3][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};  
+  uint8_t match_index = 0xFF;
+  ESP8266_AT_Client::addStringToList(target_match_array, "OK", 3);
+  ESP8266_AT_Client::addStringToList(target_match_array, "ERROR", 3);
+  
+  if(readStreamUntil(target_match_array, &match_index)){
+     if(match_index == 0){
+       ESP8266_AT_Client::DEBUG("Debug: NetworkMode Succeeded");
+       ret = true;
+     }  
+     else{
+       ESP8266_AT_Client::DEBUG("Debug: NetworkMode Failed");
+       ret = false;      
+     }     
+  }
+  
+  flushInput();
+  return ret;    
+}
+
 boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms, void (*onConnect)(void)){
   flushInput();
   stream->print("AT+CWJAP_CUR=\"");
@@ -657,49 +688,90 @@ uint8_t ESP8266_AT_Client::receive(int32_t timeout){
   uint8_t ret = 0;
   static char target_match_array[4][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1] = {0};    
   uint8_t match_index = 0xFF;
+  static uint32_t num_characters_remaining_to_receive = 0;
+  boolean ongoing_processing = false;
+  if(num_characters_remaining_to_receive > 0){
+    ongoing_processing = true;
+    ESP8266_AT_Client::DEBUG("Receive continuation.");         
+  }
   
   ESP8266_AT_Client::addStringToList(target_match_array, "+IPD,", 4);
   ESP8266_AT_Client::addStringToList(target_match_array, "CLOSED", 4);
   ESP8266_AT_Client::addStringToList(target_match_array, "OK", 4);
   while(ret == 0){
     static char tmp[32] = {0};
+    uint32_t num_characters_expected = 0;        
+    if(ongoing_processing || readStreamUntil(target_match_array, &match_index, timeout)){
       
-    if(readStreamUntil(target_match_array, &match_index, timeout)){
+      if(ongoing_processing){
+        match_index = 0; // it's as though you got +IPD
+      }
+    
       switch(match_index){
-        case 0: //+IPD, ... read and buffer charaters until you get a colon
-          ESP8266_AT_Client::DEBUG("Got '+IPD,'");
-          if(readStreamUntil(":", (char *) tmp, 31, 10)){            
-            ESP8266_AT_Client::DEBUG("Got ':'");          
-            // response buffer tells us how many bytes we expect to receive in this chunk
-            // we just need to convert it to an integer first
-            char * ptr = NULL;
-            uint32_t num_characters_expected = strtoul((char *) tmp, &ptr, 0);
-            if (*ptr != '\0'){
-               ESP8266_AT_Client::DEBUG("Receive Error, length parse error");         
-               ret = 4; // failed to parse
+        case 0: //+IPD, ... read and buffer charaters until you get a colon        
+          if(!ongoing_processing){
+            ESP8266_AT_Client::DEBUG("Got '+IPD,'");
+          }
+          
+          if(ongoing_processing || readStreamUntil(":", (char *) tmp, 31, 10)){            
+            if(!ongoing_processing){
+              ESP8266_AT_Client::DEBUG("Got ':'");                      
+              // response buffer tells us how many bytes we expect to receive in this chunk
+              // we just need to convert it to an integer first
+              char * ptr = NULL;
+              num_characters_expected = strtoul((char *) tmp, &ptr, 0);
+              if (*ptr != '\0'){
+                 ESP8266_AT_Client::DEBUG("Receive Error, length parse error");         
+                 ret = 4; // failed to parse
+              }
+              else{
+                 ESP8266_AT_Client::DEBUG("Receive expect: ", num_characters_expected);         
+              }
             }
             else{
-               ESP8266_AT_Client::DEBUG("Receive expect: ", num_characters_expected);         
+              // set up to process num_characters_remaining_to_receive 
+              // or input_buffer_length, whichever is smaller
+              if(input_buffer_length < num_characters_remaining_to_receive){
+                num_characters_expected = input_buffer_length;
+              }
+              else{
+                num_characters_expected = num_characters_remaining_to_receive;
+              }
             }
-                                  
+            
+            if(input_buffer_length < num_characters_expected){
+              ESP8266_AT_Client::DEBUG("Continuation needed.");
+              num_characters_remaining_to_receive = num_characters_expected - input_buffer_length;
+              num_characters_expected = input_buffer_length;              
+            }
+            else{
+              num_characters_remaining_to_receive = 0;
+            }                            
+              
+            ESP8266_AT_Client::DEBUG("Receiving: ", num_characters_expected);                      
             if(readStream(num_characters_expected, 5000)){
                ret = 1; // expected number of characters was received
-               // wait for "OK"
-               if(readStreamUntil(target_match_array, &match_index, timeout)){
-                  ESP8266_AT_Client::DEBUG("Receive complete");                                  
-                  if(match_index == 2){ // OK  
-                    ESP8266_AT_Client::DEBUG("Terminated by 'OK'");                                          
-                  }
-                  else if(match_index == 1){ // CLOSED
-                    ESP8266_AT_Client::DEBUG("Terminated by 'CLOSED'");   
-                  }                  
-                  else{
-                    ESP8266_AT_Client::DEBUG("Unexpected termination of ", match_index);   
-                  }
-               }
-               else{
-                  ESP8266_AT_Client::DEBUG("Timed out waiting for Receive terminator");   
-               }
+               if(num_characters_remaining_to_receive == 0){
+                 // wait for "OK"               
+                 if(readStreamUntil(target_match_array, &match_index, timeout)){
+                    ESP8266_AT_Client::DEBUG("Receive complete");                                  
+                    if(match_index == 2){ // OK  
+                      ESP8266_AT_Client::DEBUG("Terminated by 'OK'");                                          
+                    }
+                    else if(match_index == 1){ // CLOSED
+                      ESP8266_AT_Client::DEBUG("Terminated by 'CLOSED'");   
+                    }    
+                    else if(match_index == 0){ //+IPD,        
+                      ESP8266_AT_Client::DEBUG("Unexpected +IPD,");  
+                    }      
+                    else{
+                      ESP8266_AT_Client::DEBUG("Unexpected termination of ", match_index);  
+                    }
+                 }
+                 else{
+                    ESP8266_AT_Client::DEBUG("Timed out waiting for Receive terminator");   
+                 }
+              }
             }
             else{
               ret = 3; // timeout
@@ -711,7 +783,7 @@ uint8_t ESP8266_AT_Client::receive(int32_t timeout){
           }
           break;
         case 1:
-           ESP8266_AT_Client::DEBUG("Receive Complete");       
+           ESP8266_AT_Client::DEBUG("Receive Complete - connection closed by remote host");       
            ret = 2; // connection closed by remote host
            break;
         default:
