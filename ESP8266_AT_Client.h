@@ -11,7 +11,6 @@ class ESP8266_AT_Client : public Client {
 
 public:
   static Stream * debugStream; // where Debug messages go
-  static boolean debug_echo_everything_enable;
 
   ESP8266_AT_Client(uint8_t enable_pin);
   ESP8266_AT_Client(uint8_t enable_pin, Stream * stream);
@@ -43,7 +42,7 @@ public:
   uint8_t connectedToNetwork();
   operator bool();
   
-  static boolean addStringToList(char list[][ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1], char * str, uint8_t max_num_entries);
+  boolean addStringToTargetMatchList(char * str);
 private:
   Stream * stream;      // where AT commands are sent and responses received   
   boolean socket_connected;
@@ -56,26 +55,24 @@ private:
   uint16_t num_consumed_bytes_in_input_buffer;
   uint16_t num_free_bytes_in_input_buffer;  
   uint16_t num_characters_remaining_to_receive;
+  char target_match_array[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1]; 
   
+  void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
   uint8_t readFromInputBuffer(void);
   
-  boolean readStreamUntil(char target_match[][ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1], 
-    uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
-  boolean readStreamUntil(char target_match[][ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1], 
-    uint8_t * match_idx, int32_t timeout_ms);
-  boolean readStreamUntil(char target_match[][ESP8266_AT_CLIENT_MAX_STRING_LENGTH+1], 
-    uint8_t * match_idx);
+  boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
+  boolean readStreamUntil(uint8_t * match_idx, int32_t timeout_ms);
+  boolean readStreamUntil(uint8_t * match_idx);
     
-  boolean readStreamUntil(char * target_match, 
-    char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);        
+  boolean readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);        
   boolean readStreamUntil(char * target_match, int32_t timeout_ms);
   boolean readStreamUntil(char * target_match);
 
   boolean readStream(uint16_t num_characters_expected, int32_t timeout_ms);
   
   void flushInput();
-  uint8_t receive(int32_t timeout_ms, boolean delegate_received_IPD = 0);
+  uint8_t receive(boolean delegate_received_IPD = 0);
   static void DEBUG(char * msg);
   static void DEBUG(char * msg, uint16_t value);
   static void DEBUG(char * msg, char * value); 
