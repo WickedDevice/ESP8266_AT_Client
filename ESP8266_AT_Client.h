@@ -54,8 +54,10 @@ private:
   uint8_t * input_buffer_tail_ptr;  
   uint16_t num_consumed_bytes_in_input_buffer;
   uint16_t num_free_bytes_in_input_buffer;  
+  
   uint16_t num_characters_remaining_to_receive;
   char target_match_array[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1]; 
+  char target_match_lengths[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1];
   
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
@@ -69,10 +71,8 @@ private:
   boolean readStreamUntil(char * target_match, int32_t timeout_ms);
   boolean readStreamUntil(char * target_match);
 
-  boolean readStream(uint16_t num_characters_expected, int32_t timeout_ms);
-  
   void flushInput();
-  uint8_t receive(boolean delegate_received_IPD = 0);
+  void receive(boolean delegate_received_IPD = 0);
   static void DEBUG(char * msg);
   static void DEBUG(char * msg, uint16_t value);
   static void DEBUG(char * msg, char * value); 
