@@ -29,7 +29,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
   this->input_buffer_tail_ptr = NULL;    
   this->enable_pin = enable_pin;
   this->num_consumed_bytes_in_input_buffer = 0;
-  this->num_free_bytes_in_input_buffer = 0;  
+  this->num_free_bytes_in_input_buffer = 0; 
 }
 
 ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_t * buf, uint16_t buf_length){
@@ -303,10 +303,18 @@ void ESP8266_AT_Client::stop(){
 /** Check if connected to server
 	@return 1 if connected
  */
+
 uint8_t ESP8266_AT_Client::connected(){
+  return connected(true);
+} 
+ 
+uint8_t ESP8266_AT_Client::connected(boolean actively_check){
   uint8_t ret = 1; // assume we are connected
+  if(!socket_connected){
+    return 0;
+  }
   
-  if(socket_connected){
+  if(socket_connected && actively_check){
     // set up an AT command and send it
     // then return whether or not it succeeded
 
@@ -359,8 +367,8 @@ uint8_t ESP8266_AT_Client::connected(){
       }  
     }  
 
-  }
-
+  }  
+  
   return ret;
 }
 
@@ -431,9 +439,12 @@ boolean ESP8266_AT_Client::addStringToTargetMatchList(char * str){
 // pass in an array of strings to match against
 // the list is presumed to be terminated by a NULL string
 // this function can only handle up to ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES matching targets
+// TODO: this function should get another argument to reset its internal state
+//       because the caller decides it failed irrecoverably for some reason it might never recover?
 boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
   boolean match_found = false;
   const uint8_t local_target_buffer_length = 32;
+  static boolean initial_call = true;
   static char local_target_buffer[local_target_buffer_length] = {0};
   static uint16_t local_target_buffer_index = 0;
   static uint8_t match_char_idx[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES] = {0};  
@@ -450,6 +461,11 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
   }
   ESP8266_AT_Client::DEBUG("===");    
 #endif  
+  
+  if(initial_call){
+    initial_call = false;
+    //ESP8266_AT_Client::debugStream->println("\nbegin>");
+  }
   
   while(!match_found){ // until a match is found
     unsigned long currentMillis = millis();
@@ -502,8 +518,9 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
           // reset the stateful variables          
           memset(match_char_idx, 0, ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES);
           memset(local_target_buffer, 0, 32);
-          local_target_buffer_index = 0;                        
-          
+          local_target_buffer_index = 0;   
+          initial_call = true;                     
+          //ESP8266_AT_Client::debugStream->println("<end");
           break;
         }        
       }
@@ -560,9 +577,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx){
 // otherwise the write pointer is advanced
 boolean ESP8266_AT_Client::writeToInputBuffer(uint8_t c){
   if(num_free_bytes_in_input_buffer > 0){
-  
     *input_buffer_write_ptr = c; // write the value to the buffer
-    
     // update the write pointer to the next location to write to within the buffer
     if(input_buffer_write_ptr == input_buffer_tail_ptr){
       input_buffer_write_ptr = input_buffer;
@@ -573,6 +588,9 @@ boolean ESP8266_AT_Client::writeToInputBuffer(uint8_t c){
     
     num_consumed_bytes_in_input_buffer++;
     num_free_bytes_in_input_buffer--;
+    
+    //ESP8266_AT_Client::debugStream->write(c);    
+       
     return true;
   }
   else{
@@ -587,6 +605,8 @@ boolean ESP8266_AT_Client::writeToInputBuffer(uint8_t c){
 // otherwise the read pointer is advanced
 uint8_t ESP8266_AT_Client::readFromInputBuffer(void){  
   if(num_consumed_bytes_in_input_buffer > 0){    
+    uint8_t ret = *input_buffer_read_ptr;
+    
     if(input_buffer_read_ptr == input_buffer_tail_ptr){
       input_buffer_read_ptr = input_buffer;      
     }
@@ -596,7 +616,10 @@ uint8_t ESP8266_AT_Client::readFromInputBuffer(void){
     
     num_consumed_bytes_in_input_buffer--;
     num_free_bytes_in_input_buffer++;
-    return *input_buffer_read_ptr;
+
+    //ESP8266_AT_Client::debugStream->write(ret);
+    
+    return ret;
   }
   
   return -1;
@@ -610,7 +633,7 @@ void ESP8266_AT_Client::flushInput(){
     ESP8266_AT_Client::debugStream->println((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor   
 #endif    
 
-  }
+  }  
 }
 
 // 1 is Station Mode
@@ -728,6 +751,7 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
   if(receive_state == WAITING_FOR_IPD){
     clearTargetMatchArray();
     addStringToTargetMatchList("+IPD,");
+    addStringToTargetMatchList("OK");
     if(readStreamUntil(&match_index, 10) && (match_index == 0)){
       // we got +IPD,
       receive_state = WAITING_FOR_COLON;
@@ -736,8 +760,9 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
   }
   else if(receive_state == WAITING_FOR_IPD_OR_CLOSED){
     clearTargetMatchArray();
-    addStringToTargetMatchList("+IPD,");
+    addStringToTargetMatchList("+IPD,");    
     addStringToTargetMatchList("CLOSED");   
+    addStringToTargetMatchList("OK");
     if(readStreamUntil(&match_index, 10)){
       if(match_index == 0){      
         // we got +IPD,
@@ -779,14 +804,16 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
     
   if(receive_state == PROCESSING_IPD){
     ESP8266_AT_Client::DEBUG("Remaining: ", num_characters_remaining_to_receive);
+    uint32_t bytes_read_this_cycle = 0;
     while((num_characters_remaining_to_receive > 0) && (num_free_bytes_in_input_buffer > 0) && stream->available()){
       uint8_t ch = stream->read();
-
+      
+      bytes_read_this_cycle++;
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
       ESP8266_AT_Client::debugStream->write(ch);
 #endif
       
-      if(writeToInputBuffer(ch)){      
+      if(writeToInputBuffer(ch)){            
         num_characters_remaining_to_receive--;
       }      
       else{
@@ -798,7 +825,7 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
     if(num_characters_remaining_to_receive == 0){
       receive_state = WAITING_FOR_IPD_OR_CLOSED;
       ESP8266_AT_Client::DEBUG("Rx State = WAITING_FOR_IPD_OR_CLOSED (2)");
-    }
+    }    
   }
 }
 

@@ -39,6 +39,7 @@ public:
   void flush();
   void stop();
   uint8_t connected();
+  uint8_t connected(boolean actively_check);
   uint8_t connectedToNetwork();
   operator bool();
   
