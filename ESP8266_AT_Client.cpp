@@ -307,6 +307,37 @@ void ESP8266_AT_Client::stop(){
 uint8_t ESP8266_AT_Client::connected(){
   return connected(true);
 } 
+
+boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
+  boolean ret = false;
+  
+  clearTargetMatchArray();
+  addStringToTargetMatchList("STATUS:2");   // got ip    
+  addStringToTargetMatchList("STATUS:3");   // connected
+  addStringToTargetMatchList("STATUS:4");   // disconnected 
+  addStringToTargetMatchList("OK\r\n");
+  
+  stream->print("AT+CIPSTATUS");
+  stream->print("\r\n");    
+
+  uint8_t match_index = 0xFF;      
+  if(readStreamUntil(&match_index, 100)){
+    if((match_index == 0) || (match_index == 1)){
+      if(readStreamUntil("+CIPSTATUS:", 100)){
+        // we'll see three quotation marks before we reach the Remote IP address
+        if(readStreamUntil("\"", 100) && readStreamUntil("\"", 100) && readStreamUntil("\"", 100)){          
+          char remote_ip_str[16] = {0};
+          if(readStreamUntil("\"", &(remote_ip_str[0]), 16, 100)){            
+            ret = stringToIpUint32((char *) remote_ip_str, ip);
+            readStreamUntil("OK\r\n", 100);
+          }
+        }
+      }
+    }
+  } 
+  
+  return ret;
+}
  
 uint8_t ESP8266_AT_Client::connected(boolean actively_check){
   uint8_t ret = 1; // assume we are connected
@@ -422,6 +453,14 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str){
   return ret;
 }
 
+void ESP8266_AT_Client::IpUint32ToString(uint32_t ip, char * tgt){
+  sprintf(tgt, "%d.%d.%d.%d",
+    (uint8_t) (ip >> 24),
+    (uint8_t) (ip >> 16),
+    (uint8_t) (ip >> 8),
+    (uint8_t)  ip);    
+}
+
 boolean ESP8266_AT_Client::stringToIpUint32(char * str, uint32_t * ip){
   char * token = strtok(str, ".");
   uint8_t num_tokens = 0;
@@ -533,8 +572,27 @@ boolean ESP8266_AT_Client::getMacAddress(uint8_t * mac){
   return ret;
 }
 
-boolean getHostByName(const char *hostname, uint32_t *ip){
-
+boolean ESP8266_AT_Client::getHostByName(const char *hostname, uint32_t *ip, uint32_t timeout_ms){
+  // connect to host name on port 7
+  // then read the connection status to get teh remote IPAddress
+  boolean ret = false;
+  
+  stream->print("AT+CIPSTART=\"UDP\",\"");
+  stream->print(hostname);
+  stream->print("\",7\r\n");
+  
+  if(readStreamUntil("OK", timeout_ms)){     
+    uint32_t remote_ip = 0;
+    ret = getRemoteIp(&remote_ip);    
+    if(ret){
+      *ip = remote_ip;
+    }
+  }
+  
+  stream->print("AT+CIPCLOSE\r\n");
+  readStreamUntil("OK", 100);  
+  
+  return ret;
 }
 
 ESP8266_AT_Client::operator bool(){

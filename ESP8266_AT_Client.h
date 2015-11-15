@@ -24,7 +24,6 @@ public:
   boolean disconnectFromNetwork(void);
   boolean reset(void);
   
-  
   int connect(IPAddress ip, uint16_t port);
   int connect(const char *host, uint16_t port);
   int connect(IPAddress ip);
@@ -35,7 +34,12 @@ public:
   boolean getIPAddress(char * ip_str);
   boolean getMacAddress(char * mac_str);
 
-  boolean getHostByName(const char *hostname, uint32_t *ip);
+  boolean getRemoteIp(uint32_t * ip);
+  boolean getHostByName(const char *hostname, uint32_t *ip, uint32_t timeout_ms = 5000);
+  
+  // utility functions
+  void IpUint32ToString(uint32_t ip, char * tgt);
+  boolean stringToIpUint32(char * str, uint32_t * ip);    
   
   size_t write(uint8_t);
   size_t write(const uint8_t *buf, size_t size);
@@ -70,8 +74,6 @@ private:
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
   uint8_t readFromInputBuffer(void);
-  
-  boolean stringToIpUint32(char * str, uint32_t * ip);
   
   boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
   boolean readStreamUntil(uint8_t * match_idx, int32_t timeout_ms);
