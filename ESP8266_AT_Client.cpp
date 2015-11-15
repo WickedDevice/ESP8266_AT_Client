@@ -385,11 +385,148 @@ uint8_t ESP8266_AT_Client::connectedToNetwork(void){
   
   uint8_t match_index = 0xFF;  
   if(readStreamUntil(&match_index, 100)){   
-  
+    clearTargetMatchArray();
   }
   
   return ret;  
 }
+
+boolean ESP8266_AT_Client::getIPAddress(char * ip_str){
+  boolean ret = false;
+  
+  clearTargetMatchArray();
+  addStringToTargetMatchList("+CIFSR:STAIP,\""); // connected
+  addStringToTargetMatchList("OK\r\n");    
+  addStringToTargetMatchList("ERROR\r\n");    
+  
+  flushInput();
+  stream->print("AT+CIFSR");
+  stream->print("\r\n");    
+  
+  uint8_t match_index = 0xFF;  
+  if(readStreamUntil(&match_index, 100)){   
+    if(match_index == 0){
+      char tmp[32] = {0};
+      if(readStreamUntil("\"", &(tmp[0]), 32, 10)){
+        strncpy(ip_str, tmp, 16); // an ip address is at most 15 characters long
+        ret = true;
+      }
+      
+      readStreamUntil("OK", 100); // clear out the OK   
+    }
+  }
+  else{
+    // Timeout
+  }
+  
+  return ret;
+}
+
+boolean ESP8266_AT_Client::getIPAddress(uint32_t * ip){
+  boolean ret = false;
+  char tmp[16] = {0};
+  if(getIPAddress((char *) tmp)){
+    char * token = strtok(tmp, ".");
+    uint8_t num_tokens = 0;
+    uint32_t ip_address = 0;
+    
+    while(token != NULL){
+      num_tokens++;
+     
+      if(num_tokens > 4){
+        break;
+      }
+      
+      if(num_tokens > 1){
+        ip_address <<= 8;      
+      }      
+      ip_address |= atoi(token) & 0xFF;
+      
+      token = strtok(NULL, ".");
+    }
+    
+    if(num_tokens == 4){
+      ret = true;
+      *ip = ip_address;
+    }    
+  }
+
+  
+  return ret;
+}
+
+boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
+  boolean ret = false;
+  
+  clearTargetMatchArray();
+  addStringToTargetMatchList("+CIFSR:STAMAC,\""); // connected
+  addStringToTargetMatchList("OK\r\n");    
+  addStringToTargetMatchList("ERROR\r\n");    
+  
+  flushInput();
+  stream->print("AT+CIFSR");
+  stream->print("\r\n"); 
+  
+  uint8_t match_index = 0xFF;
+  if(readStreamUntil(&match_index, 100)){   
+    if(match_index == 0){
+      char tmp[32] = {0};
+      if(readStreamUntil("\"", &(tmp[0]), 32, 10)){
+        strncpy(mac_str, tmp, 18); // an mac address is at most 17 characters
+        ret = true;
+      }
+      
+      readStreamUntil("OK", 100); // clear out the OK   
+    }
+  }
+  else{
+    // Timeout
+  }
+  
+  return ret;  
+}
+
+boolean ESP8266_AT_Client::getMacAddress(uint8_t * mac){
+  boolean ret = false;
+  char tmp[18] = {0};
+  char local_mac[6] = {0};
+  if(getMacAddress((char *) tmp)){
+    char * token = strtok(tmp, ":");
+    uint8_t num_tokens = 0;
+    uint32_t ip_address = 0;
+    
+    while(token != NULL){
+      num_tokens++;
+      if(num_tokens > 6){
+        break;
+      }
+      
+      if(strlen(token) == 2){
+        char * temp = NULL;
+        uint32_t octet = strtoul((char *) token, &temp, 16);
+        if (*temp == '\0'){         
+          local_mac[num_tokens-1] = octet;
+        }
+        else{
+          break;
+        }         
+      }
+      else{
+        break;
+      }
+      
+      token = strtok(NULL, ":");
+    }
+    
+    if(num_tokens == 6){
+      ret = true;
+      memcpy(mac, local_mac, 6);
+    }    
+  }
+
+  return ret;
+}
+
 
 ESP8266_AT_Client::operator bool(){
   return (connected()==1);
@@ -426,7 +563,7 @@ boolean ESP8266_AT_Client::addStringToTargetMatchList(char * str){
     // and limit the number of characters copied
     if(free_index < ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES){         
       char * tgt_addr = &(target_match_array[free_index][0]);
-      strncpy(tgt_addr, str, ESP8266_AT_CLIENT_MAX_STRING_LENGTH);  // copy the string in      
+      strncpy(tgt_addr, str, ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1);  // copy the string in      
       target_match_lengths[free_index] = strlen(tgt_addr);
       return true;
     }
@@ -783,7 +920,7 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
     clearTargetMatchArray();
     addStringToTargetMatchList(":");    
     char tmp[32] = {0};
-    if(readStreamUntil(&match_index, &(tmp[0]), 31, 10)){
+    if(readStreamUntil(&match_index, &(tmp[0]), 32, 10)){
       if(match_index == 0){
         char * temp = NULL;
         uint32_t num_characters_expected = strtoul((char *) tmp, &temp, 10);

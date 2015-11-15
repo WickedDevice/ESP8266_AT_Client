@@ -30,6 +30,11 @@ public:
   int connect(IPAddress ip);
   int connect(const char *host);
   
+  boolean getIPAddress(uint32_t * ip);
+  boolean getMacAddress(uint8_t * mac);
+  boolean getIPAddress(char * ip_str);
+  boolean getMacAddress(char * mac_str);
+  
   size_t write(uint8_t);
   size_t write(const uint8_t *buf, size_t size);
   int available();
