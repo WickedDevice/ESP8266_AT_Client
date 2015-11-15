@@ -422,35 +422,41 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str){
   return ret;
 }
 
+boolean ESP8266_AT_Client::stringToIpUint32(char * str, uint32_t * ip){
+  char * token = strtok(str, ".");
+  uint8_t num_tokens = 0;
+  uint32_t ip_address = 0;
+  boolean ret = false;
+  
+  while(token != NULL){
+    num_tokens++;
+   
+    if(num_tokens > 4){
+      break;
+    }
+    
+    if(num_tokens > 1){
+      ip_address <<= 8;      
+    }      
+    ip_address |= atoi(token) & 0xFF;
+    
+    token = strtok(NULL, ".");
+  }
+  
+  if(num_tokens == 4){
+    ret = true;
+    *ip = ip_address;
+  }
+  
+  return ret;
+}
+
 boolean ESP8266_AT_Client::getIPAddress(uint32_t * ip){
   boolean ret = false;
   char tmp[16] = {0};
   if(getIPAddress((char *) tmp)){
-    char * token = strtok(tmp, ".");
-    uint8_t num_tokens = 0;
-    uint32_t ip_address = 0;
-    
-    while(token != NULL){
-      num_tokens++;
-     
-      if(num_tokens > 4){
-        break;
-      }
-      
-      if(num_tokens > 1){
-        ip_address <<= 8;      
-      }      
-      ip_address |= atoi(token) & 0xFF;
-      
-      token = strtok(NULL, ".");
-    }
-    
-    if(num_tokens == 4){
-      ret = true;
-      *ip = ip_address;
-    }    
+    ret = stringToIpUint32(tmp, ip);
   }
-
   
   return ret;
 }
@@ -527,6 +533,9 @@ boolean ESP8266_AT_Client::getMacAddress(uint8_t * mac){
   return ret;
 }
 
+boolean getHostByName(const char *hostname, uint32_t *ip){
+
+}
 
 ESP8266_AT_Client::operator bool(){
   return (connected()==1);

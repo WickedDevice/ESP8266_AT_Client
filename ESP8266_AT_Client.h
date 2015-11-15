@@ -34,6 +34,8 @@ public:
   boolean getMacAddress(uint8_t * mac);
   boolean getIPAddress(char * ip_str);
   boolean getMacAddress(char * mac_str);
+
+  boolean getHostByName(const char *hostname, uint32_t *ip);
   
   size_t write(uint8_t);
   size_t write(const uint8_t *buf, size_t size);
@@ -68,6 +70,8 @@ private:
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
   uint8_t readFromInputBuffer(void);
+  
+  boolean stringToIpUint32(char * str, uint32_t * ip);
   
   boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
   boolean readStreamUntil(uint8_t * match_idx, int32_t timeout_ms);
