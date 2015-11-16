@@ -24,26 +24,25 @@ void setup(void){
   Serial.print("Set Mode to Station...");
   esp.setNetworkMode(1);
   Serial.println("OK");   
-  
+
   Serial.print("Connecting to Network...");  
   esp.connectToNetwork(NETWORK_SSID, NETWORK_PASSWORD, 60000, NULL); // connect to the network
-  Serial.println("OK");   
-  
-  uint8_t ip[4] = {192,168,1,47};
-  uint8_t gateway[4] = {192,168,1,1};
-  uint8_t subnetmask[4] = {255,255,255,0};
-  uint8_t dnsserver[4] = {192,168,1,1};
-  
-  uint32_t ip_u32 = esp.IpArrayToIpUint32((uint8_t *) ip); 
-  uint32_t gateway_u32 = esp.IpArrayToIpUint32((uint8_t *) gateway); 
-  uint32_t subnetmask_u32 = esp.IpArrayToIpUint32((uint8_t *) subnetmask); 
-  uint32_t dnsserver_u32 = esp.IpArrayToIpUint32((uint8_t *) dnsserver); 
-  
-  if(!esp.setStaticIPAddress(ip_u32, subnetmask_u32, gateway_u32, dnsserver_u32)){
-    Serial.println("Failed to set Static IP");
+  Serial.println("OK"); 
+
+  if(!esp.setDHCP()){
+    Serial.println("Failed to set DHCP");
   }
   else{
-    Serial.println("Successfully set Static IP");
+    uint32_t ip = 0;
+    if(!esp.getIPAddress(&ip)){
+      Serial.println("Failed to get IP address"); 
+    }
+    else{
+      char ip_str[16] = {0};
+      esp.IpUint32ToString(ip, (char *) &(ip_str[0]));
+      Serial.print("Got IP: ");
+      Serial.println((char *) ip_str);
+    }
   }
 
 }

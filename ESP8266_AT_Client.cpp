@@ -216,6 +216,21 @@ boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMa
   return ret;
 }
 
+boolean ESP8266_AT_Client::setDHCP(void){
+  boolean ret = false;
+  stream->print("AT+CWDHCP_CUR=1,1\r\n");
+  
+  clearTargetMatchArray();
+  addStringToTargetMatchList("OK");
+  addStringToTargetMatchList("WIFI GOT IP");  
+  uint8_t match_index = 0xff;
+  while(readStreamUntil(&match_index, 2000)){
+    ret = true;
+  }
+  
+  return ret;
+}
+
 /** Write a character in request
 	@param c			Character to write
 	@return 1 if a character was sent 0 otherwise
