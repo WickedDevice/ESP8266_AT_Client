@@ -33,7 +33,7 @@ void setup(void){
   esp.setInputBuffer(input_buffer, ESP8266_INPUT_BUFFER_SIZE); // connect the input buffer up
   esp.reset();                                                 // reset the module
   
-  Serial.print("Set Network to Station...");
+  Serial.print("Set Mode to Station...");
   esp.setNetworkMode(1);
   Serial.println("OK");   
   

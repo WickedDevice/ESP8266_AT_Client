@@ -7,6 +7,13 @@
 #define ESP8266_AT_CLIENT_MAX_STRING_LENGTH      (32)
 #define ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES (5)
 
+typedef struct {
+  uint8_t security;
+  char ssid[33];
+  int8_t rssi;
+  uint8_t mac[6];  
+} ap_scan_result_t;
+
 class ESP8266_AT_Client : public Client {
 
 public:
@@ -36,10 +43,14 @@ public:
 
   boolean getRemoteIp(uint32_t * ip);
   boolean getHostByName(const char *hostname, uint32_t *ip, uint32_t timeout_ms = 5000);
+  boolean scanAccessPoints(ap_scan_result_t * results, uint8_t max_num_results, uint8_t * num_results_found, uint32_t timeout_ms = 10000);
   
   // utility functions
   void IpUint32ToString(uint32_t ip, char * tgt);
   boolean stringToIpUint32(char * str, uint32_t * ip);    
+
+  void macArrayToString(uint8_t * mac, char * tgt);
+  boolean stringToMacArray(char * str, uint8_t * mac);
   
   size_t write(uint8_t);
   size_t write(const uint8_t *buf, size_t size);
@@ -74,6 +85,7 @@ private:
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
   uint8_t readFromInputBuffer(void);
+  void addScanResult(ap_scan_result_t * result, char * line);
   
   boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
   boolean readStreamUntil(uint8_t * match_idx, int32_t timeout_ms);

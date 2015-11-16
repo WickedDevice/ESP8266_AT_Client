@@ -308,6 +308,84 @@ uint8_t ESP8266_AT_Client::connected(){
   return connected(true);
 } 
 
+boolean ESP8266_AT_Client::scanAccessPoints(ap_scan_result_t * results, uint8_t max_num_results, uint8_t * num_results_found, uint32_t timeout_ms){
+  boolean ret = false;
+    
+  clearTargetMatchArray();
+  addStringToTargetMatchList("+CWLAP:(");
+  addStringToTargetMatchList(")\r\n");
+  addStringToTargetMatchList("OK\r\n");
+  
+  stream->print("AT+CWLAP");
+  stream->print("\r\n");    
+  
+  uint8_t match_index = 0xFF;
+  char line[128] = {0};
+  uint8_t result_number = 0;
+  
+  while(readStreamUntil((uint8_t *) &match_index, &(line[0]), 128, timeout_ms)){
+    ret = true;
+    
+    if(match_index == 1){ // got )
+      if(result_number < max_num_results){
+        addScanResult(&(results[result_number]), line);
+        memset((char *) line, 0, 128);
+      }
+      result_number++;      
+    }
+    else if(match_index == 2){
+      break;
+    }
+  }
+  
+  *num_results_found = result_number;
+     
+  return ret;
+}
+
+void ESP8266_AT_Client::addScanResult(ap_scan_result_t * result, char * line){
+  // tokenize the line on commas
+  result->security = 0;
+  memset(&(result->ssid[0]), 0, 32);
+  result->rssi = -128;
+  memset(&(result->mac[0]), 0, 6);
+  
+  char * token = strtok(line, ",");
+  uint8_t token_number = 0;
+  uint8_t len = 0;
+  while(token != NULL){
+    switch(token_number){
+    case 0:
+      result->security = atoi(token);
+      break;
+    case 1: 
+      // ssid is quoted
+      len = strlen(token);
+      if((len <= 32) && (token[0] == '\"') && (token[len - 1] == '\"')){
+        token[len - 1] = NULL;
+        strncpy(&(result->ssid[0]), &(token[1]), 33);         
+      }
+      break;
+    case 2:
+      result->rssi = atoi(token);
+      break;
+    case 3: 
+      // mac address is quoted
+      len = strlen(token);
+      if((len <= 32) && (token[0] == '\"') && (token[len - 1] == '\"')){      
+        token[len - 1] = NULL;
+        stringToMacArray(&(token[1]), &(result->mac[0])); 
+        break;
+      }
+      break;    
+    default:
+      break;      
+    }
+    token = strtok(NULL, ",");
+    token_number++;
+  }  
+}
+
 boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
   boolean ret = false;
   
@@ -490,6 +568,53 @@ boolean ESP8266_AT_Client::stringToIpUint32(char * str, uint32_t * ip){
   return ret;
 }
 
+void ESP8266_AT_Client::macArrayToString(uint8_t * mac, char * tgt){
+  sprintf(tgt, "%02X:%02X:%02X:%02X:%02X:%02X",
+    mac[0],
+    mac[1],
+    mac[2],
+    mac[3],
+    mac[4],
+    mac[5]);
+}
+
+boolean ESP8266_AT_Client::stringToMacArray(char * str, uint8_t * mac){
+  boolean ret = false;
+  char * token = strtok(str, ":");
+  uint8_t num_tokens = 0;
+  uint32_t ip_address = 0;
+  char local_mac[6] = {0};
+  
+  while(token != NULL){
+    num_tokens++;
+    if(num_tokens > 6){
+      break;
+    }
+    
+    if(strlen(token) == 2){
+      char * temp = NULL;
+      uint32_t octet = strtoul((char *) token, &temp, 16);
+      if (*temp == '\0'){         
+        local_mac[num_tokens-1] = octet;
+      }
+      else{
+        break;
+      }         
+    }
+    else{
+      break;
+    }
+    
+    token = strtok(NULL, ":");
+  }
+  
+  if(num_tokens == 6){
+    ret = true;
+    memcpy(mac, local_mac, 6);
+  }      
+  return ret;
+}
+
 boolean ESP8266_AT_Client::getIPAddress(uint32_t * ip){
   boolean ret = false;
   char tmp[16] = {0};
@@ -533,40 +658,9 @@ boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
 
 boolean ESP8266_AT_Client::getMacAddress(uint8_t * mac){
   boolean ret = false;
-  char tmp[18] = {0};
-  char local_mac[6] = {0};
+  char tmp[18] = {0};  
   if(getMacAddress((char *) tmp)){
-    char * token = strtok(tmp, ":");
-    uint8_t num_tokens = 0;
-    uint32_t ip_address = 0;
-    
-    while(token != NULL){
-      num_tokens++;
-      if(num_tokens > 6){
-        break;
-      }
-      
-      if(strlen(token) == 2){
-        char * temp = NULL;
-        uint32_t octet = strtoul((char *) token, &temp, 16);
-        if (*temp == '\0'){         
-          local_mac[num_tokens-1] = octet;
-        }
-        else{
-          break;
-        }         
-      }
-      else{
-        break;
-      }
-      
-      token = strtok(NULL, ":");
-    }
-    
-    if(num_tokens == 6){
-      ret = true;
-      memcpy(mac, local_mac, 6);
-    }    
+    ret = stringToMacArray((char *) tmp, mac);
   }
 
   return ret;
@@ -647,9 +741,7 @@ boolean ESP8266_AT_Client::addStringToTargetMatchList(char * str){
 //       because the caller decides it failed irrecoverably for some reason it might never recover?
 boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
   boolean match_found = false;
-  const uint8_t local_target_buffer_length = 32;
   static boolean initial_call = true;
-  static char local_target_buffer[local_target_buffer_length] = {0};
   static uint16_t local_target_buffer_index = 0;
   static uint8_t match_char_idx[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES] = {0};  
   unsigned long previousMillis = millis();      
@@ -714,14 +806,12 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
           // copy the collected local data into the caller's buffer
           if(target_buffer != NULL){
             if(local_target_buffer_index > target_buffer_length){
-              ESP8266_AT_Client::DEBUG("Warn: caller's buffer is smaller than needed to contain", local_target_buffer);
+              ESP8266_AT_Client::DEBUG("Warn: caller's buffer is smaller than needed to contain", target_buffer);
             }
-            strncpy(target_buffer, local_target_buffer, target_buffer_length);
           }
           
           // reset the stateful variables          
           memset(match_char_idx, 0, ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES);
-          memset(local_target_buffer, 0, 32);
           local_target_buffer_index = 0;   
           initial_call = true;                     
           //ESP8266_AT_Client::debugStream->println("<end");
@@ -730,11 +820,11 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
       }
       
       if(!match_found && target_buffer != NULL){
-        if(local_target_buffer_index < local_target_buffer_length - 1){
-          local_target_buffer[local_target_buffer_index++] = chr;
+        if(local_target_buffer_index < target_buffer_length - 1){
+          target_buffer[local_target_buffer_index++] = chr;
         }
         else{
-          ESP8266_AT_Client::DEBUG("Local target buffer would overflow");
+          ESP8266_AT_Client::DEBUG("Target buffer would overflow");
           break; // target buffer overflow
         }
       }      
