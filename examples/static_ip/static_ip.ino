@@ -22,19 +22,21 @@ void setup(void){
   esp.setNetworkMode(1);
   Serial.println("OK");   
   
-  uint8_t mac[6] = {0x18,0x3f,0x7a,0x11,0xF3,0x29};
-  if(!esp.setMacAddress(mac)){
-    Serial.println("Unable to set MAC address!");
+  uint8_t ip[4] = {192,168,1,47};
+  uint8_t gateway[4] = {192,168,1,1};
+  uint8_t subnetmask[4] = {255,255,255,0};
+  uint8_t dnsserver[4] = {192,168,1,1};
+  
+  uint32_t ip_u32 = esp.IpArrayToIpUint32((uint8_t *) ip); 
+  uint32_t gateway_u32 = esp.IpArrayToIpUint32((uint8_t *) gateway); 
+  uint32_t subnetmask_u32 = esp.IpArrayToIpUint32((uint8_t *) subnetmask); 
+  uint32_t dnsserver_u32 = esp.IpArrayToIpUint32((uint8_t *) dnsserver); 
+  
+  if(!esp.setStaticIPAddress(ip_u32, subnetmask_u32, gateway_u32, dnsserver_u32)){
+    Serial.println("Failed to set Static IP");
   }
   else{
-    char mac_str[18] = {0};
-    if(!esp.getMacAddress(&(mac_str[0]))){
-      Serial.println("Unable to get MAC address!");
-    }
-    else{
-      Serial.print("MAC Address set to: ");
-      Serial.println(mac_str);
-    }
+    Serial.println("Successfully set Static IP");
   }
 
 }

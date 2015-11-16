@@ -1,5 +1,4 @@
 #include <ESP8266_AT_Client.h>
-#include <util/crc16.h>
 
 #define NETWORK_SSID     "YOUR NETWORK NAME"
 #define NETWORK_PASSWORD "YOUR NETWORK PASSWORD"

@@ -160,6 +160,62 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port){
   return ret;
 }
 
+boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
+  boolean ret = false;
+  char mac_str[18] = {0};
+  macArrayToString(mac_address, (char *) mac_str);
+  
+  if(strlen(mac_str) == 17){ // e.g. 00:04:4a:23:11:7b
+    flushInput();
+    stream->print("AT+CIPSTAMAC_CUR=\"");
+    stream->print(mac_str);
+    stream->print("\"\r\n");
+
+    clearTargetMatchArray();
+    addStringToTargetMatchList("OK");
+    addStringToTargetMatchList("WIFI DISCONNECT");    
+    addStringToTargetMatchList("WIFI CONNECTED");    
+    addStringToTargetMatchList("WIFI GOT IP"); 
+    uint8_t match_index = 0xFF;
+    while(readStreamUntil(&match_index, 5000)){
+      if(match_index == 0){
+        ret = true;
+      }
+    }
+  }
+  
+  return ret;
+}
+
+// note dnsServer is currently ignored as there is no direct support for it in the AT command set, afaict
+// at any rate, we are currently *emulating* DNS in this library, not actually sending explicit DNS requests to a name server
+boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMask, uint32_t defaultGateway, uint32_t dnsServer){
+  boolean ret = false;
+  char ip_str[16] = {0};
+  char netMask_str[16] = {0};
+  char defaultGateway_str[16] = {0};
+  char dnsServer_str[16] = {0};
+  
+  IpUint32ToString(ipAddress, (char *) ip_str);
+  IpUint32ToString(netMask, (char *) netMask_str);
+  IpUint32ToString(defaultGateway, (char *) defaultGateway_str);
+  IpUint32ToString(dnsServer, (char *) dnsServer_str);
+  
+  stream->print("AT+CIPSTA_CUR=\"");
+  stream->print((char *) ip_str);
+  stream->print("\",\"");
+  stream->print((char *) defaultGateway_str);
+  stream->print("\",\"");
+  stream->print((char *) netMask_str);
+  stream->print("\"\r\n");
+
+  if(readStreamUntil("OK", 1000)){
+    ret = true;
+  }
+  
+  return ret;
+}
+
 /** Write a character in request
 	@param c			Character to write
 	@return 1 if a character was sent 0 otherwise
@@ -531,12 +587,43 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str){
   return ret;
 }
 
+uint32_t ESP8266_AT_Client::IpArrayToIpUint32(uint8_t * ip){
+  uint32_t ret = 0;
+  ret |= ((uint32_t) ip[0]) << 24;
+  ret |= ((uint32_t) ip[1]) << 16;
+  ret |= ((uint32_t) ip[2]) << 8;
+  ret |= ((uint32_t) ip[3]) << 0;
+  return ret;
+}
+
+void ESP8266_AT_Client::IpUint32ToArray(uint32_t ip, uint8_t * ip_arr){
+  ip_arr[0] = (ip >> 24) & 0xff;
+  ip_arr[1] = (ip >> 16) & 0xff;
+  ip_arr[2] = (ip >> 8) & 0xff;
+  ip_arr[3] = (ip >> 0) & 0xff;  
+}
+
+boolean ESP8266_AT_Client::stringToIpArray(char * str, uint8_t * ip){
+  uint32_t ip_u32 = 0;
+  boolean ret = false;
+  if(stringToIpUint32(str, &ip_u32)){
+    IpUint32ToArray(ip_u32, ip);
+    ret = true;
+  }
+  return ret;
+}
+
+void ESP8266_AT_Client::IpArrayToString(uint8_t * ip, char * tgt){
+  uint32_t ip_u32 = IpArrayToIpUint32(ip);
+  IpUint32ToString(ip_u32, tgt);
+}
+
 void ESP8266_AT_Client::IpUint32ToString(uint32_t ip, char * tgt){
   sprintf(tgt, "%d.%d.%d.%d",
     (uint8_t) (ip >> 24),
     (uint8_t) (ip >> 16),
     (uint8_t) (ip >> 8),
-    (uint8_t)  ip);    
+    (uint8_t) (ip >> 0));    
 }
 
 boolean ESP8266_AT_Client::stringToIpUint32(char * str, uint32_t * ip){

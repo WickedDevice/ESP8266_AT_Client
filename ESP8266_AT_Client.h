@@ -44,10 +44,17 @@ public:
   boolean getRemoteIp(uint32_t * ip);
   boolean getHostByName(const char *hostname, uint32_t *ip, uint32_t timeout_ms = 5000);
   boolean scanAccessPoints(ap_scan_result_t * results, uint8_t max_num_results, uint8_t * num_results_found, uint32_t timeout_ms = 10000);
+  boolean setMacAddress(uint8_t * mac_address);
+  boolean setStaticIPAddress(uint32_t ipAddress, uint32_t netMask, uint32_t defaultGateway, uint32_t dnsServer);
+  boolean setDHCP(void);
   
   // utility functions
-  void IpUint32ToString(uint32_t ip, char * tgt);
-  boolean stringToIpUint32(char * str, uint32_t * ip);    
+  uint32_t IpArrayToIpUint32(uint8_t * ip);
+  void IpArrayToString(uint8_t * ip, char * tgt);
+  void IpUint32ToArray(uint32_t ip, uint8_t * ip_arr);
+  void IpUint32ToString(uint32_t ip, char * tgt);  
+  boolean stringToIpUint32(char * str, uint32_t * ip);      
+  boolean stringToIpArray(char * str, uint8_t * ip);
 
   void macArrayToString(uint8_t * mac, char * tgt);
   boolean stringToMacArray(char * str, uint8_t * mac);
