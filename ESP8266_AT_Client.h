@@ -48,9 +48,9 @@ public:
   boolean connectUDP(uint32_t ip, uint16_t port);
   boolean connectUDP(const char *host, uint16_t port);
   
-  boolean getIPAddress(uint32_t * ip);
+  boolean getIPAddress(uint32_t * ip, uint32_t * gateway, uint32_t * netmask);
   boolean getMacAddress(uint8_t * mac);
-  boolean getIPAddress(char * ip_str);
+  boolean getIPAddress(char * ip_str, char * gateway_str, char * netmask_str);
   boolean getMacAddress(char * mac_str);
 
   boolean getRemoteIp(uint32_t * ip);

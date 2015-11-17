@@ -598,32 +598,49 @@ uint8_t ESP8266_AT_Client::connectedToNetwork(void){
   return ret;  
 }
 
-boolean ESP8266_AT_Client::getIPAddress(char * ip_str){
+boolean ESP8266_AT_Client::getIPAddress(char * ip_str, char * gateway_str, char * netmask_str){
   boolean ret = false;
   
   clearTargetMatchArray();
-  addStringToTargetMatchList("+CIFSR:STAIP,\""); // connected
-  addStringToTargetMatchList("OK\r\n");    
-  addStringToTargetMatchList("ERROR\r\n");    
+  addStringToTargetMatchList("+CIPSTA:ip:\"");
+  addStringToTargetMatchList("+CIPSTA:gateway:\"");
+  addStringToTargetMatchList("+CIPSTA:netmask:\"");    
+  addStringToTargetMatchList("\""); // this is tricky, since it's a subset of other match strings, it must come after them
+  addStringToTargetMatchList("OK\r\n");       
   
   flushInput();
-  stream->print("AT+CIFSR");
+  stream->print("AT+CIPSTA?");
   stream->print("\r\n");    
   
   uint8_t match_index = 0xFF;  
-  if(readStreamUntil(&match_index, 100)){   
-    if(match_index == 0){
-      char tmp[32] = {0};
-      if(readStreamUntil("\"", &(tmp[0]), 32, 10)){
-        strncpy(ip_str, tmp, 16); // an ip address is at most 15 characters long
-        ret = true;
+  char tmp[32] = {0};
+  uint8_t which_ip = 0xFF; // 0 for ip, 1 for gateway, 2 for netmask
+  while(readStreamUntil(&match_index, &(tmp[0]), 32, 100)){       
+    ret = true;   
+    if((which_ip < 3) && (match_index == 3) && (strlen(tmp) <= 15)){
+      switch(which_ip){
+      case 0: 
+        strcpy(ip_str, tmp); 
+        break;
+      case 1: 
+        strcpy(gateway_str, tmp); 
+        break;
+      case 2: 
+        strcpy(netmask_str, tmp); 
+        break;
+      default: break;
       }
-      
-      readStreamUntil("OK", 100); // clear out the OK   
     }
-  }
-  else{
-    // Timeout
+    
+    which_ip = 0xFF;
+    if(match_index < 3){
+      which_ip = match_index;
+      memset(tmp, 0, 32);
+    }
+    
+    if(match_index == 4){
+      break;
+    }    
   }
   
   return ret;
@@ -744,11 +761,16 @@ boolean ESP8266_AT_Client::stringToMacArray(char * str, uint8_t * mac){
   return ret;
 }
 
-boolean ESP8266_AT_Client::getIPAddress(uint32_t * ip){
+boolean ESP8266_AT_Client::getIPAddress(uint32_t * ip, uint32_t * gateway, uint32_t * netmask){
   boolean ret = false;
-  char tmp[16] = {0};
-  if(getIPAddress((char *) tmp)){
-    ret = stringToIpUint32(tmp, ip);
+  char ip_str[16] = {0};
+  char gateway_str[16] = {0};
+  char netmask_str[16] = {0};
+  ret = getIPAddress((char *) &(ip_str[0]), (char *) &(gateway_str[0]), (char *) &(netmask_str[0]));
+  if(ret){
+    stringToIpUint32((char *) &(ip_str[0]), ip);
+    stringToIpUint32((char *) &(gateway_str[0]), gateway); 
+    stringToIpUint32((char *) &(netmask_str[0]), netmask);     
   }
   
   return ret;
@@ -961,6 +983,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
   }
   
   ESP8266_AT_Client::DEBUG("*** ", (uint8_t) match_found);
+  ESP8266_AT_Client::DEBUG("==> ", (uint8_t) *match_idx);
    
   return match_found;   
 }

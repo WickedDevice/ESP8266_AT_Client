@@ -33,15 +33,21 @@ void setup(void){
     Serial.println("Failed to set DHCP");
   }
   else{
-    uint32_t ip = 0;
-    if(!esp.getIPAddress(&ip)){
+    uint32_t ip = 0, gateway = 0, netmask = 0;
+    if(!esp.getIPAddress(&ip, &gateway, &netmask)){
       Serial.println("Failed to get IP address"); 
     }
     else{
-      char ip_str[16] = {0};
+      char ip_str[16] = {0}, gateway_str[16] = {0}, netmask_str[16] = {0};
       esp.IpUint32ToString(ip, (char *) &(ip_str[0]));
-      Serial.print("Got IP: ");
+      esp.IpUint32ToString(gateway, (char *) &(gateway_str[0]));
+      esp.IpUint32ToString(netmask, (char *) &(netmask_str[0]));
+      Serial.print("IP: ");
       Serial.println((char *) ip_str);
+      Serial.print("Gateway: ");
+      Serial.println((char *) gateway_str);
+      Serial.print("Netmask: ");
+      Serial.println((char *) netmask_str);            
     }
   }
 
