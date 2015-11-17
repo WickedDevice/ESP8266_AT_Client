@@ -228,6 +228,22 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
   return ret;
 }
 
+// 0 : disable sleep mode
+// 1 : light-sleep mode
+// 2 : modem-sleep mode 
+boolean ESP8266_AT_Client::sleep(uint8_t mode){
+  boolean ret = false;
+  stream->print("AT+SLEEP=");
+  stream->print(mode);
+  stream->print("\r\n");
+  
+  if(readStreamUntil("OK", 100)){
+    ret = true;
+  }
+  
+  return ret;
+}
+
 // note dnsServer is currently ignored as there is no direct support for it in the AT command set, afaict
 // at any rate, we are currently *emulating* DNS in this library, not actually sending explicit DNS requests to a name server
 boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMask, uint32_t defaultGateway, uint32_t dnsServer){
@@ -582,8 +598,8 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
 uint8_t ESP8266_AT_Client::connectedToNetwork(void){
   uint8_t ret = 0; 
 
-  clearTargetMatchArray();
-  addStringToTargetMatchList("+CWJAP:"); // connected
+  clearTargetMatchArray();  
+  addStringToTargetMatchList("+CWJAP_CUR:"); // connected
   addStringToTargetMatchList("No AP"); // disconnected
   addStringToTargetMatchList("OK\r\n");    
   
@@ -591,8 +607,14 @@ uint8_t ESP8266_AT_Client::connectedToNetwork(void){
   stream->print("\r\n");  
   
   uint8_t match_index = 0xFF;  
-  if(readStreamUntil(&match_index, 100)){   
-    clearTargetMatchArray();
+  while(readStreamUntil(&match_index, 500)){   
+    if(match_index == 0){
+      ret = 1;
+    }
+    
+    if(match_index == 2){
+      break;
+    }
   }
   
   return ret;  

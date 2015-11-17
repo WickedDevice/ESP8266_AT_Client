@@ -57,18 +57,103 @@ void loop(void){
   }
 }
 
-uint16_t crc16_checksum = 0;
-uint32_t body_bytes_received = 0;
-boolean past_header = false; 
+uint16_t download_body_crc16_checksum = 0;
+uint32_t download_body_bytes_received = 0;
+boolean download_past_header = false; 
+uint32_t download_content_length = 0;
+
+void downloadHandleHeader(char * key, char * value){
+  Serial.print("\"");
+  Serial.print(key);
+  Serial.print("\" => \"");
+  Serial.print(value);
+  Serial.println("\"");
+  
+  if(strcmp(key, "Content-Length") == 0){
+    download_content_length = strtoul(value, NULL, 10);   
+    Serial.print("Content-Length = ");
+    Serial.println(download_content_length);
+  }
+}
+
+uint32_t downloadProcessHeader(uint8_t * data, uint32_t data_length){
+  uint32_t start_index = 0;         
+  static uint8_t header_guard_index = 0; 
+  static boolean past_first_line = false;
+  static char key[64] = {0};
+  static char value[64] = {0};
+  static uint8_t key_or_value = 0;
+  static uint8_t keyval_index = 0;
+  
+  if(!download_past_header){
+    for(uint32_t ii = 0; ii < data_length; ii++){                 
+      switch(header_guard_index){
+      case 0:
+        if(data[ii] == '\r') header_guard_index++;
+        else if(data[ii] == ':'){
+          key_or_value = 1;
+          keyval_index = 0;
+        }
+        else if(past_first_line){
+          if(keyval_index < 63){
+            if(!((keyval_index == 0) && (data[ii] == ' '))){ // strip leading spaces
+              if(key_or_value == 0) key[keyval_index++] = data[ii];
+              else value[keyval_index++] = data[ii];
+            }
+          }
+          else{
+            // warning the key string doesn't fit in 64 characters
+          }
+        }
+        break;
+      case 1:
+        if(data[ii] == '\n'){
+          header_guard_index++;
+          
+          if(past_first_line){
+            downloadHandleHeader((char *) key, (char *) value);
+          }
+          
+          past_first_line = true;
+          key_or_value = 0;
+          keyval_index = 0;
+          memset(key, 0, 64);
+          memset(value, 0, 64);          
+        }
+        else header_guard_index = 0;        
+        break;
+      case 2:
+        if(data[ii] == '\r') header_guard_index++;
+        else{
+          key[keyval_index++] = data[ii];
+          header_guard_index = 0;         
+        }
+        break;
+      case 3:
+        if(data[ii] == '\n') header_guard_index++;
+        else header_guard_index = 0;         
+        break;
+      case 4:        
+        download_past_header = true;
+        start_index = ii;
+        header_guard_index = 0;
+        break;
+      }      
+    }
+  }  
+
+  return start_index;
+}
 
 void downloadFile(char * hostname, uint16_t port, char * filename, void (*responseBodyProcessor)(uint8_t *, uint32_t)){      
   unsigned long total_bytes_read = 0;
   uint8_t mybuffer[64] = {0};
   
   // re-initialize the globals
-  crc16_checksum = 0;
-  body_bytes_received = 0;   
-  past_header = false;  
+  download_body_crc16_checksum = 0;
+  download_body_bytes_received = 0;   
+  download_past_header = false;  
+  download_content_length = 0;
   
   /* Try connecting to the website.
      Note: HTTP/1.1 protocol is used to keep the server from closing the connection before all data is read.
@@ -110,10 +195,7 @@ void downloadFile(char * hostname, uint16_t port, char * filename, void (*respon
       lastRead = millis();
     }
   }
-
-//  Serial.print("Remaining bytes: ");
-//  Serial.println(esp.available());
-   
+  
   esp.stop();
   
   Serial.println();  
@@ -121,9 +203,9 @@ void downloadFile(char * hostname, uint16_t port, char * filename, void (*respon
   Serial.print("Total Bytes: ");
   Serial.println(total_bytes_read);
   Serial.print("File Size: ");
-  Serial.println(body_bytes_received);
+  Serial.println(download_body_bytes_received);
   Serial.print("Checksum: ");
-  Serial.println(crc16_checksum);  
+  Serial.println(download_body_crc16_checksum);  
   Serial.print("Duration: ");
   Serial.println(millis() - start_time);   
   
@@ -131,41 +213,12 @@ void downloadFile(char * hostname, uint16_t port, char * filename, void (*respon
 }
 
 void processResponseData(uint8_t * data, uint32_t data_length){
-  uint32_t start_index = 0;         
-  static uint8_t header_guard_index = 0; 
+  uint32_t start_index = downloadProcessHeader(data, data_length);
   
-  if(!past_header){
-    for(uint32_t ii = 0; ii < data_length; ii++){                 
-      switch(header_guard_index){
-      case 0:
-        if(data[ii] == '\r') header_guard_index++;
-        break;
-      case 1:
-        if(data[ii] == '\n') header_guard_index++;
-        else header_guard_index = 0;        
-        break;
-      case 2:
-        if(data[ii] == '\r') header_guard_index++;
-        else header_guard_index = 0;         
-        break;
-      case 3:
-        if(data[ii] == '\n') header_guard_index++;
-        else header_guard_index = 0;         
-        break;
-      case 4:        
-        past_header = true;
-        start_index = ii;
-        header_guard_index = 0;
-        break;
-      }      
-    }
-  }
-
-  if(past_header){
-    body_bytes_received += data_length - start_index;
+  if(download_past_header){
+    download_body_bytes_received += data_length - start_index;
     for(uint32_t ii = start_index; ii < data_length; ii++){     
-      crc16_checksum = _crc16_update(crc16_checksum, data[ii]);
+      download_body_crc16_checksum = _crc16_update(download_body_crc16_checksum, data[ii]);
     }
-  }
-    
+  }    
 }

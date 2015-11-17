@@ -32,7 +32,7 @@ public:
   void setInputBuffer(uint8_t * buf, uint16_t buf_length);
   
   boolean setNetworkMode(uint8_t mode);
-  boolean connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms, void (*onConnect)(void));
+  boolean connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms = 60000, void (*onConnect)(void) = NULL);
   boolean disconnectFromNetwork(void);
   boolean reset(void);
   
@@ -59,6 +59,7 @@ public:
   boolean setMacAddress(uint8_t * mac_address);
   boolean setStaticIPAddress(uint32_t ipAddress, uint32_t netMask, uint32_t defaultGateway, uint32_t dnsServer);
   boolean setDHCP(void);
+  boolean sleep(uint8_t mode);
   
   // utility functions
   uint32_t IpArrayToIpUint32(uint8_t * ip);
