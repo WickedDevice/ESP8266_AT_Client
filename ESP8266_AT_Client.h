@@ -14,6 +14,11 @@ typedef struct {
   uint8_t mac[6];  
 } ap_scan_result_t;
 
+typedef enum {
+  ESP8266_TCP, 
+  ESP8266_UDP
+} esp8266_connect_proto_t;
+
 class ESP8266_AT_Client : public Client {
 
 public:
@@ -31,10 +36,17 @@ public:
   boolean disconnectFromNetwork(void);
   boolean reset(void);
   
-  int connect(IPAddress ip, uint16_t port);
-  int connect(const char *host, uint16_t port);
+  int connect(IPAddress ip, uint16_t port, esp8266_connect_proto_t proto);
+  int connect(uint32_t ip, uint16_t port, esp8266_connect_proto_t proto);
+  int connect(const char *host, uint16_t port, esp8266_connect_proto_t proto);
   int connect(IPAddress ip);
   int connect(const char *host);
+
+  int connect(IPAddress ip, uint16_t port);
+  int connect(const char *host, uint16_t port);
+  
+  boolean connectUDP(uint32_t ip, uint16_t port);
+  boolean connectUDP(const char *host, uint16_t port);
   
   boolean getIPAddress(uint32_t * ip);
   boolean getMacAddress(uint8_t * mac);
@@ -76,6 +88,8 @@ public:
 private:
   Stream * stream;      // where AT commands are sent and responses received   
   boolean socket_connected;
+  esp8266_connect_proto_t socket_type;
+  
   uint8_t enable_pin;
   uint8_t * input_buffer;
   uint16_t input_buffer_length;

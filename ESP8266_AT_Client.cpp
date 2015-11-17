@@ -102,10 +102,16 @@ int ESP8266_AT_Client::connect(const char *host){
 	@param port     the port to connect to
 	@return returns 0 if last command is still executing, 1 success, 2 if there are no resources
  */
-int ESP8266_AT_Client::connect(IPAddress ip, uint16_t port){
+int ESP8266_AT_Client::connect(IPAddress ip, uint16_t port, esp8266_connect_proto_t proto){
   char host[16] = {0}; // worst case 111.111.111.111 + the null terminator = 16 characters
-  snprintf(host, 15, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-  return connect(host, port);
+  snprintf(host, 15, "%d.%d.%d.%d", ip[3], ip[2], ip[1], ip[0]);
+  return connect(host, port, proto);
+}
+
+int ESP8266_AT_Client::connect(uint32_t ip, uint16_t port, esp8266_connect_proto_t proto){
+  char host[16] = {0}; // worst case 111.111.111.111 + the null terminator = 16 characters
+  IpUint32ToString(ip, (char *) host);
+  return connect(host, port, proto);  
 }
 
 /** Connect to server by hostname
@@ -113,7 +119,7 @@ int ESP8266_AT_Client::connect(IPAddress ip, uint16_t port){
 	@param port			the port to connect to
 	@return returns 0 if last command is still executing, 1 success, 2 if there are no resources
  */
-int ESP8266_AT_Client::connect(const char *host, uint16_t port){
+int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_proto_t proto){
   // only implementing a blocking API - never return 0
   // set up an AT command and send it
   // then return whether or not it succeeded
@@ -124,12 +130,22 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port){
   ESP8266_AT_Client::DEBUG("Connecting to ", (char *) host);
   
   flushInput();
-  stream->print("AT+CIPSTART=\"TCP\",\"");
+  stream->print("AT+CIPSTART=\"");
+  if(proto == ESP8266_TCP){
+    stream->print("TCP");
+  }
+  else if(proto == ESP8266_UDP){
+    stream->print("UDP");
+  }
+  
+  stream->print("\",\"");
   stream->print(host);
   stream->print("\",");
   stream->print(port);
-  stream->print(",");
-  stream->print(120); // keep alive interval in units of "0.5 second intervals" (i.e. 1 minute)
+  if(proto == ESP8266_TCP){
+    stream->print(",");
+    stream->print(120); // keep alive interval in units of "0.5 second intervals" (i.e. 1 minute)
+  }
   stream->print("\r\n");  
   
   // ESP8266 responds with either "OK", "ERROR", or "ALREADY CONNECT" 
@@ -140,24 +156,49 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port){
   uint8_t match_index = 0xFF;  
   if(readStreamUntil(&match_index)){
      if(match_index == 0){ // got "OK"     
-       ESP8266_AT_Client::DEBUG("TCPConnect Connected");     
+       ESP8266_AT_Client::DEBUG("Connected");     
        ret = 1; // success
      }  
      else if(match_index == 2){
-       ESP8266_AT_Client::DEBUG("TCPConnect Already Connected");      
-       ret = 1; // success     
+       ESP8266_AT_Client::DEBUG("Already Connected");      
+       ret = 1; // success            
      }
      else{     
-       ESP8266_AT_Client::DEBUG("TCPConnect Failed");
+       ESP8266_AT_Client::DEBUG("Failed");
        ret = 2; // error
      }     
   }
   
   if(ret == 1){
-    socket_connected = true;
+    socket_connected = true;    
+    socket_type = proto;
   } 
   
   return ret;
+}
+
+int ESP8266_AT_Client::connect(IPAddress ip, uint16_t port){
+  return connect(ip, port, ESP8266_TCP);
+}
+
+int ESP8266_AT_Client::connect(const char *host, uint16_t port){
+  return connect(host, port, ESP8266_TCP);
+}
+
+boolean ESP8266_AT_Client::connectUDP(uint32_t ip, uint16_t port){
+  boolean ret = false;
+  if(connect(ip, port, ESP8266_UDP)){
+    ret = true;
+  }
+  return ret;
+}
+
+boolean ESP8266_AT_Client::connectUDP(const char *host, uint16_t port){
+  boolean ret = false;
+  if(connect(host, port, ESP8266_UDP)){
+    ret = true;
+  }
+  return ret;  
 }
 
 boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
@@ -276,26 +317,10 @@ int ESP8266_AT_Client::available(){
   // packet in at a time and we'll keep a 1500 byte buffer around to store
   // the buffered data, hey maybe we can even implement peek correctly
   int ret = num_consumed_bytes_in_input_buffer;  
-      
-  if(ret == 0){  
-    // if there's nothing available and we're connnected
-    // lets go ahead and try and get some data buffered for processing
-    if(socket_connected){
-      receive(); // doesn't really matter what the response is
-      ret = num_consumed_bytes_in_input_buffer;
-//      switch(receive()){
-//        case 1: // input buffer ready        
-//        case 3: // timeout        
-//          break;
-//        case 2: // connection closed
-//          // socket_connected = false;
-//          break;
-//        case 4: // sync error
-//          // stop();
-//          break;
-//      }    
-
-    }
+  
+  if(socket_connected){
+    receive(); // doesn't really matter what the response is
+    ret = num_consumed_bytes_in_input_buffer;   
   }
 
   return ret;
@@ -359,10 +384,10 @@ void ESP8266_AT_Client::stop(){
     uint8_t match_index = 0xFF;        
     if(readStreamUntil(&match_index, 5000)){
        if(match_index == 0){ // got "CLOSED"
-         ESP8266_AT_Client::DEBUG("TCPClose Succeeded");
+         ESP8266_AT_Client::DEBUG("Close Succeeded");
        }  
        else{       
-         ESP8266_AT_Client::DEBUG("TCPClose Failed");
+         ESP8266_AT_Client::DEBUG("Close Failed");
        }     
     }
     
@@ -471,7 +496,7 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
 
   uint8_t match_index = 0xFF;      
   if(readStreamUntil(&match_index, 100)){
-    if((match_index == 0) || (match_index == 1)){
+    if((match_index == 0) || (match_index == 1) || ((match_index == 2) && (socket_type == ESP8266_UDP))){
       if(readStreamUntil("+CIPSTATUS:", 100)){
         // we'll see three quotation marks before we reach the Remote IP address
         if(readStreamUntil("\"", 100) && readStreamUntil("\"", 100) && readStreamUntil("\"", 100)){          
@@ -519,8 +544,10 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
       if(readStreamUntil(&match_index, 100)){      
         switch(match_index){
         case 2: //disconnected
-          socket_connected = false;
-          ret = 0;   
+          if(socket_type == ESP8266_TCP){
+            socket_connected = false;      
+            ret = 0;
+          }   
           break;
         case 4: // +IPD, gotta deal with it
           receive(true);
