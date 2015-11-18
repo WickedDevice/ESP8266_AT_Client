@@ -391,7 +391,7 @@ void ESP8266_AT_Client::flush(){
 /** Stop client
  */
 void ESP8266_AT_Client::stop(){
-  if(socket_connected){
+  if(socket_connected || (socket_type == ESP8266_UDP)){
 
     // set up an AT command and send it
     // then return whether or not it succeeded
@@ -416,6 +416,8 @@ void ESP8266_AT_Client::stop(){
     }
     
   }
+    
+  readStreamUntil("OK", 100);
     
   socket_connected = false;  
 }
@@ -557,7 +559,7 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
   
   stream->print("AT+CIPSTATUS");
   stream->print("\r\n");    
-
+     
   uint8_t match_index = 0xFF;      
   if(readStreamUntil(&match_index, 100)){
     if((match_index == 0) || (match_index == 1) || ((match_index == 2) && (socket_type == ESP8266_UDP))){
@@ -892,7 +894,7 @@ boolean ESP8266_AT_Client::getHostByName(const char *hostname, uint32_t *ip, uin
   // then read the connection status to get teh remote IPAddress
   boolean ret = false;
   
-  stop(); // only has any effect if socket_connected is true
+  socket_type = ESP8266_UDP;
   
   stream->print("AT+CIPSTART=\"UDP\",\"");
   stream->print(hostname);
@@ -906,8 +908,7 @@ boolean ESP8266_AT_Client::getHostByName(const char *hostname, uint32_t *ip, uin
     }
   }
   
-  stream->print("AT+CIPCLOSE\r\n");
-  readStreamUntil("OK", 100);  
+  stop();
   
   return ret;
 }
