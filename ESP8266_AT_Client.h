@@ -22,8 +22,6 @@ typedef enum {
 class ESP8266_AT_Client : public Client {
 
 public:
-  static Stream * debugStream; // where Debug messages go
-
   ESP8266_AT_Client(uint8_t enable_pin);
   ESP8266_AT_Client(uint8_t enable_pin, Stream * stream);
   ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_t * buf, uint16_t buf_length);
@@ -56,6 +54,7 @@ public:
   boolean getRemoteIp(uint32_t * ip);
   boolean getHostByName(const char *hostname, uint32_t *ip, uint32_t timeout_ms = 5000);
   boolean scanAccessPoints(ap_scan_result_t * results, uint8_t max_num_results, uint8_t * num_results_found, uint32_t timeout_ms = 10000);
+  boolean scanForAccessPoint(char * ssid, ap_scan_result_t * result, uint8_t * num_results_found, uint32_t timeout_ms = 10000);
   boolean setMacAddress(uint8_t * mac_address);
   boolean setStaticIPAddress(uint32_t ipAddress, uint32_t netMask, uint32_t defaultGateway, uint32_t dnsServer);
   boolean setDHCP(void);
@@ -68,6 +67,9 @@ public:
   void IpUint32ToString(uint32_t ip, char * tgt);  
   boolean stringToIpUint32(char * str, uint32_t * ip);      
   boolean stringToIpArray(char * str, uint8_t * ip);
+  void enableDebug(void);
+  void disableDebug(void);
+  void setDebugStream(Stream * ds);
 
   void macArrayToString(uint8_t * mac, char * tgt);
   boolean stringToMacArray(char * str, uint8_t * mac);
@@ -88,9 +90,12 @@ public:
   boolean addStringToTargetMatchList(char * str);
 private:
   Stream * stream;      // where AT commands are sent and responses received   
+  Stream * debugStream; // where Debug messages go
+  boolean debugEnabled;
+    
   boolean socket_connected;
   esp8266_connect_proto_t socket_type;
-  
+
   uint8_t enable_pin;
   uint8_t * input_buffer;
   uint16_t input_buffer_length;
@@ -107,7 +112,7 @@ private:
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
   uint8_t readFromInputBuffer(void);
-  void addScanResult(ap_scan_result_t * result, char * line);
+  void parseScanResult(ap_scan_result_t * result, char * line);
   
   boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
   boolean readStreamUntil(uint8_t * match_idx, int32_t timeout_ms);
@@ -119,9 +124,9 @@ private:
 
   void flushInput();
   void receive(boolean delegate_received_IPD = 0);
-  static void DEBUG(char * msg);
-  static void DEBUG(char * msg, uint16_t value);
-  static void DEBUG(char * msg, char * value); 
+  void ESP8266_DEBUG(char * msg);
+  void ESP8266_DEBUG(char * msg, uint16_t value);
+  void ESP8266_DEBUG(char * msg, char * value); 
 };
 
 #endif
