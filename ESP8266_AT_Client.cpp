@@ -323,7 +323,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   if(readStreamUntil(">", 1000)){  
     ret = stream->write(buf, sz); // pass it along    
     
-    if(readStreamUntil("SEND OK\r\n\r\n", 1000)){
+    if(readStreamUntil("SEND OK\r\n", 1000)){
        ESP8266_DEBUG("Send succeeded");     
     }
   }
