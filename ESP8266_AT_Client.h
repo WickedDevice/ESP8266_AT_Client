@@ -59,6 +59,7 @@ public:
   boolean setStaticIPAddress(uint32_t ipAddress, uint32_t netMask, uint32_t defaultGateway, uint32_t dnsServer);
   boolean setDHCP(void);
   boolean sleep(uint8_t mode);
+  boolean setTcpKeepAliveInterval(uint16_t _tcp_seconds); // 0 - 7200; 0 is disabled
   
   // utility functions
   uint32_t IpArrayToIpUint32(uint8_t * ip);
@@ -95,6 +96,7 @@ private:
     
   boolean socket_connected;
   esp8266_connect_proto_t socket_type;
+  uint16_t tcp_keep_alive_interval_seconds;
 
   uint8_t enable_pin;
   uint8_t * input_buffer;

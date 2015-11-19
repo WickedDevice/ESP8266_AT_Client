@@ -17,6 +17,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin){
   this->num_free_bytes_in_input_buffer = 0;
   this->debugEnabled = false;
   this->debugStream = NULL;
+  this->tcp_keep_alive_interval_seconds = 120;
 }
 
 ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
@@ -32,6 +33,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
   this->num_free_bytes_in_input_buffer = 0; 
   this->debugEnabled = false;
   this->debugStream = NULL;
+  this->tcp_keep_alive_interval_seconds = 120;
 }
 
 ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_t * buf, uint16_t buf_length){
@@ -47,6 +49,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_
   this->num_free_bytes_in_input_buffer = 0;  
   this->debugEnabled = false;
   this->debugStream = NULL;
+  this->tcp_keep_alive_interval_seconds = 120;
 }
 
 void ESP8266_AT_Client::setDebugStream(Stream * ds){
@@ -152,7 +155,7 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
   stream->print(port);
   if(proto == ESP8266_TCP){
     stream->print(",");
-    stream->print(120); // keep alive interval in units of "0.5 second intervals" (i.e. 1 minute)
+    stream->print(tcp_keep_alive_interval_seconds); // keep alive interval in units of seconds
   }
   stream->print("\r\n");  
   
@@ -1243,6 +1246,14 @@ boolean ESP8266_AT_Client::disconnectFromNetwork(){
   }
 
   return ret;
+}
+
+boolean ESP8266_AT_Client::setTcpKeepAliveInterval(uint16_t _tcp_seconds){
+  if(_tcp_seconds <= 7200){
+    tcp_keep_alive_interval_seconds = _tcp_seconds;
+    return true;
+  }
+  return false;
 }
 
 void ESP8266_AT_Client::receive(boolean delegate_received_IPD){    
