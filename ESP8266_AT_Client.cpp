@@ -71,7 +71,7 @@ boolean ESP8266_AT_Client::reset(void){
   
    ESP8266_DEBUG("ESP8266 Hello World.");
 
-   if(readStreamUntil("ready", 1000)){
+   if(readStreamUntil("ready", 5000)){
      ESP8266_DEBUG("Received 'ready'"); 
    } 
    else{
