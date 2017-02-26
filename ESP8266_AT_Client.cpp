@@ -490,13 +490,16 @@ void ESP8266_AT_Client::flush(){
 /** Stop client
  */
 void ESP8266_AT_Client::stop(){
-  if(socket_connected || (socket_type == ESP8266_UDP)){
+  if(socket_connected || (socket_type == ESP8266_UDP) || listener_started){
 
     // set up an AT command and send it
     // then return whether or not it succeeded
 
     flushInput();
     stream->print("AT+CIPCLOSE");
+    if(listener_started){
+      stream->print("=0"); //TODO: assumes target is link id 0
+    }
     stream->print("\r\n");
 
     // ESP8266 responds with either "OK", "ERROR"
