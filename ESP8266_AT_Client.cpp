@@ -1308,7 +1308,7 @@ boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t tim
       onConnect();
     }
     // wait for got IP status
-    if(readStreamUntil("WIFI GOT IP", 60000)){
+    if(readStreamUntil("WIFI GOT IP", timeout_ms)){
        ESP8266_DEBUG("Got IP");
 
        if(readStreamUntil("OK")){
