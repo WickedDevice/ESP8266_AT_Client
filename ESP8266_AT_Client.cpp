@@ -1100,6 +1100,13 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
 
     if(stream->available()){
 
+      // NOTE: not sure we need to do this but this seems a better place for it than on _any_ character rx
+      // the problem with that is that the timeout can be totally disregarded in softAP mode when a
+      // client is polling and we are waitin on a long timeout (e.g. 30 seconds for network connect)
+      if(reset_timeout_on_possible_rx){
+        previousMillis = millis(); // reset the timeout on any sequence-matching character received
+      }
+
       char chr = stream->read(); // read a character
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
@@ -1119,13 +1126,6 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
         // otherwise reset its match index
         if(chr == target_match_array[ii][match_char_idx[ii]]){
            match_char_idx[ii]++;
-
-           // NOTE: not sure we need to do this but this seems a better place for it than on _any_ character rx
-           // the problem with that is that the timeout can be totally disregarded in softAP mode when a
-           // client is polling and we are waitin on a long timeout (e.g. 30 seconds for network connect)
-           if(reset_timeout_on_possible_rx){
-             previousMillis = millis(); // reset the timeout on any sequence-matching character received
-           }
         }
         else{
            match_char_idx[ii] = 0;
