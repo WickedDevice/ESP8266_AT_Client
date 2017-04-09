@@ -1065,12 +1065,13 @@ boolean ESP8266_AT_Client::addStringToTargetMatchList(char * str){
 // this function can only handle up to ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES matching targets
 // TODO: this function should get another argument to reset its internal state
 //       because the caller decides it failed irrecoverably for some reason it might never recover?
-boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
+boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx){
   boolean match_found = false;
   static boolean initial_call = true;
   static uint16_t local_target_buffer_index = 0;
   static uint8_t match_char_idx[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES] = {0};
   unsigned long previousMillis = millis();
+  boolean first_match_character_received = false;
 
 #ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
   if((debugStream != NULL) && debugEnabled){
@@ -1098,7 +1099,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
     }
 
     if(stream->available()){
-      previousMillis = millis(); // reset the timeout
+
       char chr = stream->read(); // read a character
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
@@ -1118,6 +1119,13 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
         // otherwise reset its match index
         if(chr == target_match_array[ii][match_char_idx[ii]]){
            match_char_idx[ii]++;
+
+           // NOTE: not sure we need to do this but this seems a better place for it than on _any_ character rx
+           // the problem with that is that the timeout can be totally disregarded in softAP mode when a
+           // client is polling and we are waitin on a long timeout (e.g. 30 seconds for network connect)
+           if(reset_timeout_on_possible_rx){
+             previousMillis = millis(); // reset the timeout on any sequence-matching character received
+           }
         }
         else{
            match_char_idx[ii] = 0;
@@ -1167,7 +1175,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
 
 // pass a single string to match against
 // the string must not be longer than 31 characters
-boolean ESP8266_AT_Client::readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
+boolean ESP8266_AT_Client::readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx){
   uint8_t dummy_return;
 
   if(strlen(target_match) > 31){
@@ -1176,8 +1184,16 @@ boolean ESP8266_AT_Client::readStreamUntil(char * target_match, char * target_bu
   else{
     clearTargetMatchArray();
     addStringToTargetMatchList(target_match);
-    return readStreamUntil(&dummy_return, target_buffer, target_buffer_length, timeout_ms);
+    return readStreamUntil(&dummy_return, target_buffer, target_buffer_length, timeout_ms, reset_timeout_on_possible_rx);
   }
+}
+
+boolean ESP8266_AT_Client::readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
+  return readStreamUntil(target_match, target_buffer, target_buffer_length, timeout_ms, true); // reset timeout on possible rx
+}
+
+boolean ESP8266_AT_Client::readStreamUntil(char * target_match, int32_t timeout_ms, boolean reset_timeout_on_possible_rx){
+  return readStreamUntil(target_match, NULL, 0, timeout_ms, reset_timeout_on_possible_rx);
 }
 
 boolean ESP8266_AT_Client::readStreamUntil(char * target_match, int32_t timeout_ms){
@@ -1186,6 +1202,10 @@ boolean ESP8266_AT_Client::readStreamUntil(char * target_match, int32_t timeout_
 
 boolean ESP8266_AT_Client::readStreamUntil(char * target_match){
   return readStreamUntil(target_match, -1);
+}
+
+boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
+    return readStreamUntil(match_idx, target_buffer, target_buffer_length, timeout_ms, true); // reset timeout on possible rx
 }
 
 boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, int32_t timeout_ms){
@@ -1301,14 +1321,14 @@ boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t tim
   stream->print("\r\n");
 
   // wait for connected status
-  if(readStreamUntil("WIFI CONNECTED", timeout_ms)){
+  if(readStreamUntil("WIFI CONNECTED", timeout_ms, false)){
 
     ESP8266_DEBUG("Connected to Network");
     if(onConnect != NULL){
       onConnect();
     }
     // wait for got IP status
-    if(readStreamUntil("WIFI GOT IP", timeout_ms)){
+    if(readStreamUntil("WIFI GOT IP", timeout_ms, false)){
        ESP8266_DEBUG("Got IP");
 
        if(readStreamUntil("OK")){
