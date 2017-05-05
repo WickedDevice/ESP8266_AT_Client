@@ -1269,9 +1269,12 @@ uint8_t ESP8266_AT_Client::readFromInputBuffer(void){
 }
 
 void ESP8266_AT_Client::flushInput(){
-  while((num_consumed_bytes_in_input_buffer > 0) || (stream->available() > 0)){
-    stream->read();
-    readFromInputBuffer();
+  while(stream->available() > 0){
+    char chr = stream->read();
+
+#ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
+    if(debugStream != NULL && debugEnabled) debugStream->println((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor
+#endif
   }
 }
 
