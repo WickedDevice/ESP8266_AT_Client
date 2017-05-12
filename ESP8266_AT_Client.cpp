@@ -1169,7 +1169,8 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
 
   ESP8266_DEBUG("*** ", (uint8_t) match_found);
   ESP8266_DEBUG("==> ", (uint8_t) *match_idx);
-
+  delayMicroseconds(10); // i'm not sure why, but it's more well behaved with this delay injected
+                         // one theory is that it gives the Serial output time to clear?
   return match_found;
 }
 
