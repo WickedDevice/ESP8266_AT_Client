@@ -152,23 +152,23 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
   ESP8266_DEBUG("Connecting to ", (char *) host);
 
   flushInput();
-  stream->print("AT+CIPSTART=\"");
+  streamPrint("AT+CIPSTART=\"");
   if(proto == ESP8266_TCP){
-    stream->print("TCP");
+    streamPrint("TCP");
   }
   else if(proto == ESP8266_UDP){
-    stream->print("UDP");
+    streamPrint("UDP");
   }
 
-  stream->print("\",\"");
-  stream->print(host);
-  stream->print("\",");
-  stream->print(port);
+  streamPrint("\",\"");
+  streamPrint(host);
+  streamPrint("\",");
+  streamPrint(port);
   if(proto == ESP8266_TCP){
-    stream->print(",");
-    stream->print(tcp_keep_alive_interval_seconds); // keep alive interval in units of seconds
+    streamPrint(",");
+    streamPrint(tcp_keep_alive_interval_seconds); // keep alive interval in units of seconds
   }
-  stream->print("\r\n");
+  streamPrint("\r\n");
 
   // ESP8266 responds with either "OK", "ERROR", or "ALREADY CONNECT"
   clearTargetMatchArray();
@@ -230,9 +230,9 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
 
   if(strlen(mac_str) == 17){ // e.g. 00:04:4a:23:11:7b
     flushInput();
-    stream->print("AT+CIPSTAMAC_CUR=\"");
-    stream->print(mac_str);
-    stream->print("\"\r\n");
+    streamPrint("AT+CIPSTAMAC_CUR=\"");
+    streamPrint(mac_str);
+    streamPrint("\"\r\n");
 
     clearTargetMatchArray();
     addStringToTargetMatchList("OK");
@@ -255,8 +255,8 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
   flushInput();
 
   // setup tcp server
-  stream->print("AT+CIPMUX=1");
-  stream->print("\r\n");
+  streamPrint("AT+CIPMUX=1");
+  streamPrint("\r\n");
 
   clearTargetMatchArray();
   addStringToTargetMatchList("OK");
@@ -277,9 +277,9 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
     flushInput();
     ret = false;
 
-    stream->print("AT+CIPSERVER=1,");
-    stream->print(port);
-    stream->print("\r\n");
+    streamPrint("AT+CIPSERVER=1,");
+    streamPrint(port);
+    streamPrint("\r\n");
 
     clearTargetMatchArray();
     addStringToTargetMatchList("OK");
@@ -304,15 +304,15 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
 boolean ESP8266_AT_Client::configureSoftAP(const char *ssid, const char *pwd, uint8_t channel, uint8_t sec){
   boolean ret = false;
   flushInput();
-  stream->print("AT+CWSAP_CUR=\"");
-  stream->print(ssid);
-  stream->print("\",\"");
-  stream->print(pwd);
-  stream->print("\",");
-  stream->print(channel);
-  stream->print(",");
-  stream->print(sec);
-  stream->print("\r\n");
+  streamPrint("AT+CWSAP_CUR=\"");
+  streamPrint(ssid);
+  streamPrint("\",\"");
+  streamPrint(pwd);
+  streamPrint("\",");
+  streamPrint(channel);
+  streamPrint(",");
+  streamPrint(sec);
+  streamPrint("\r\n");
 
   clearTargetMatchArray();
   addStringToTargetMatchList("OK");
@@ -336,9 +336,9 @@ boolean ESP8266_AT_Client::configureSoftAP(const char *ssid, const char *pwd, ui
 // 2 : modem-sleep mode
 boolean ESP8266_AT_Client::sleep(uint8_t mode){
   boolean ret = false;
-  stream->print("AT+SLEEP=");
-  stream->print(mode);
-  stream->print("\r\n");
+  streamPrint("AT+SLEEP=");
+  streamPrint(mode);
+  streamPrint("\r\n");
 
   if(readStreamUntil("OK", 100)){
     ret = true;
@@ -361,13 +361,13 @@ boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMa
   IpUint32ToString(defaultGateway, (char *) defaultGateway_str);
   IpUint32ToString(dnsServer, (char *) dnsServer_str);
 
-  stream->print("AT+CIPSTA_CUR=\"");
-  stream->print((char *) ip_str);
-  stream->print("\",\"");
-  stream->print((char *) defaultGateway_str);
-  stream->print("\",\"");
-  stream->print((char *) netMask_str);
-  stream->print("\"\r\n");
+  streamPrint("AT+CIPSTA_CUR=\"");
+  streamPrint((char *) ip_str);
+  streamPrint("\",\"");
+  streamPrint((char *) defaultGateway_str);
+  streamPrint("\",\"");
+  streamPrint((char *) netMask_str);
+  streamPrint("\"\r\n");
 
   if(readStreamUntil("OK", 1000)){
     ret = true;
@@ -378,7 +378,7 @@ boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMa
 
 boolean ESP8266_AT_Client::setDHCP(void){
   boolean ret = false;
-  stream->print("AT+CWDHCP_CUR=1,1\r\n");
+  streamPrint("AT+CWDHCP_CUR=1,1\r\n");
 
   clearTargetMatchArray();
   addStringToTargetMatchList("OK");
@@ -408,13 +408,13 @@ size_t ESP8266_AT_Client::write(uint8_t c){
 size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   size_t ret = 0;
 
-  stream->print("AT+CIPSEND=");
+  streamPrint("AT+CIPSEND=");
   if(listener_started){
     // TODO: this assumes the link id is zero, and so only supports one connection
-    stream->print("0,");
+    streamPrint("0,");
   }
-  stream->print(sz);
-  stream->print("\r\n");
+  streamPrint(sz);
+  streamPrint("\r\n");
 
   if(readStreamUntil(">", 1000)){
     ret = stream->write(buf, sz); // pass it along
@@ -496,11 +496,11 @@ void ESP8266_AT_Client::stop(){
     // then return whether or not it succeeded
 
     flushInput();
-    stream->print("AT+CIPCLOSE");
+    streamPrint("AT+CIPCLOSE");
     if(listener_started){
-      stream->print("=0"); //TODO: assumes target is link id 0
+      streamPrint("=0"); //TODO: assumes target is link id 0
     }
-    stream->print("\r\n");
+    streamPrint("\r\n");
 
     // ESP8266 responds with either "OK", "ERROR"
     clearTargetMatchArray();
@@ -542,8 +542,8 @@ boolean ESP8266_AT_Client::scanForAccessPoint(char * ssid, ap_scan_result_t * re
   addStringToTargetMatchList(")\r\n");
   addStringToTargetMatchList("OK\r\n");
 
-  stream->print("AT+CWLAP");
-  stream->print("\r\n");
+  streamPrint("AT+CWLAP");
+  streamPrint("\r\n");
 
   uint8_t match_index = 0xFF;
   char line[128] = {0};
@@ -580,8 +580,8 @@ boolean ESP8266_AT_Client::scanAccessPoints(ap_scan_result_t * results, uint8_t 
   addStringToTargetMatchList(")\r\n");
   addStringToTargetMatchList("OK\r\n");
 
-  stream->print("AT+CWLAP");
-  stream->print("\r\n");
+  streamPrint("AT+CWLAP");
+  streamPrint("\r\n");
 
   uint8_t match_index = 0xFF;
   char line[128] = {0};
@@ -659,8 +659,8 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
   addStringToTargetMatchList("STATUS:4");   // disconnected
   addStringToTargetMatchList("OK\r\n");
 
-  stream->print("AT+CIPSTATUS");
-  stream->print("\r\n");
+  streamPrint("AT+CIPSTATUS");
+  streamPrint("\r\n");
 
   uint8_t match_index = 0xFF;
   if(readStreamUntil(&match_index, 100)){
@@ -705,8 +705,8 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
       receive(true); // receive is already in progress
     }
     else{
-      stream->print("AT+CIPSTATUS");
-      stream->print("\r\n");
+      streamPrint("AT+CIPSTATUS");
+      streamPrint("\r\n");
 
       uint8_t match_index = 0xFF;
       if(readStreamUntil(&match_index, 100)){
@@ -755,8 +755,8 @@ uint8_t ESP8266_AT_Client::connectedToNetwork(void){
   addStringToTargetMatchList("No AP"); // disconnected
   addStringToTargetMatchList("OK\r\n");
 
-  stream->print("AT+CWJAP_CUR?");
-  stream->print("\r\n");
+  streamPrint("AT+CWJAP_CUR?");
+  streamPrint("\r\n");
 
   uint8_t match_index = 0xFF;
   while(readStreamUntil(&match_index, 500)){
@@ -783,8 +783,8 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str, char * gateway_str, char 
   addStringToTargetMatchList("OK\r\n");
 
   flushInput();
-  stream->print("AT+CIPSTA?");
-  stream->print("\r\n");
+  streamPrint("AT+CIPSTA?");
+  streamPrint("\r\n");
 
   uint8_t match_index = 0xFF;
   char tmp[32] = {0};
@@ -959,8 +959,8 @@ boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
   addStringToTargetMatchList("ERROR\r\n");
 
   flushInput();
-  stream->print("AT+CIFSR");
-  stream->print("\r\n");
+  streamPrint("AT+CIFSR");
+  streamPrint("\r\n");
 
   uint8_t match_index = 0xFF;
   if(readStreamUntil(&match_index, 100)){
@@ -998,9 +998,9 @@ boolean ESP8266_AT_Client::getHostByName(const char *hostname, uint32_t *ip, uin
 
   socket_type = ESP8266_UDP;
 
-  stream->print("AT+CIPSTART=\"UDP\",\"");
-  stream->print(hostname);
-  stream->print("\",7\r\n");
+  streamPrint("AT+CIPSTART=\"UDP\",\"");
+  streamPrint(hostname);
+  streamPrint("\",7\r\n");
 
   if(readStreamUntil("OK", timeout_ms)){
     uint32_t remote_ip = 0;
@@ -1089,7 +1089,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
 
   if(initial_call){
     initial_call = false;
-    //debugStream->println("\nbegin>");
+    //debugstreamPrintln("\nbegin>");
   }
 
   while(!match_found){ // until a match is found
@@ -1110,7 +1110,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
       char chr = stream->read(); // read a character
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
-      if(debugStream != NULL && debugEnabled) debugStream->print(chr); // echo the received characters to the Serial Monitor
+      if(debugStream != NULL && debugEnabled) debugstreamPrint(chr); // echo the received characters to the Serial Monitor
 #endif
 
       // for each target match
@@ -1150,7 +1150,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
           memset(match_char_idx, 0, ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES);
           local_target_buffer_index = 0;
           initial_call = true;
-          //debugStream->println("<end");
+          //debugstreamPrintln("<end");
           break;
         }
       }
@@ -1274,7 +1274,7 @@ void ESP8266_AT_Client::flushInput(){
     char chr = stream->read();
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
-    if(debugStream != NULL && debugEnabled) debugStream->println((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor
+    if(debugStream != NULL && debugEnabled) debugstreamPrintln((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor
 #endif
   }
 }
@@ -1286,9 +1286,9 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
   boolean ret = false;
 
   flushInput();
-  stream->print("AT+CWMODE_CUR=");
-  stream->print(mode);
-  stream->print("\r\n");
+  streamPrint("AT+CWMODE_CUR=");
+  streamPrint(mode);
+  streamPrint("\r\n");
 
   // ESP8266 responds with either "OK", "ERROR"
   clearTargetMatchArray();
@@ -1313,12 +1313,13 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
 
 boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms, void (*onConnect)(void)){
   flushInput();
-  stream->print("AT+CWJAP_CUR=\"");
-  stream->print(ssid);
-  stream->print("\",\"");
-  stream->print(pwd);
-  stream->print("\"");
-  stream->print("\r\n");
+
+  streamPrint("AT+CWJAP_CUR=\"");
+  streamPrint(ssid);
+  streamPrint("\",\"");
+  streamPrint(pwd);
+  streamPrint("\"");
+  streamPrint("\r\n");
 
   // wait for connected status
   if(readStreamUntil("WIFI CONNECTED", timeout_ms, false)){
@@ -1353,8 +1354,8 @@ boolean ESP8266_AT_Client::disconnectFromNetwork(){
   boolean ret = false;
 
   flushInput();
-  stream->print("AT+CWQAP");
-  stream->print("\r\n");
+  streamPrint("AT+CWQAP");
+  streamPrint("\r\n");
 
   if(readStreamUntil("WIFI DISCONNECT", 1000)){
      ESP8266_DEBUG("Disconnected from Network");
@@ -1500,8 +1501,8 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
 void ESP8266_AT_Client::ESP8266_DEBUG(char * msg){
 #ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
   if((debugStream != NULL) && debugEnabled){
-    debugStream->print("Debug: ");
-    debugStream->println(msg);
+    debugstreamPrint("Debug: ");
+    debugstreamPrintln(msg);
     debugStream->flush();
   }
 #endif
@@ -1510,9 +1511,9 @@ void ESP8266_AT_Client::ESP8266_DEBUG(char * msg){
 void ESP8266_AT_Client::ESP8266_DEBUG(char * msg, uint16_t value){
 #ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
   if((debugStream != NULL) && debugEnabled){
-    debugStream->print("Debug: ");
-    debugStream->print(msg);
-    debugStream->println(value);
+    debugstreamPrint("Debug: ");
+    debugstreamPrint(msg);
+    debugstreamPrintln(value);
     debugStream->flush();
   }
 #endif
@@ -1521,11 +1522,11 @@ void ESP8266_AT_Client::ESP8266_DEBUG(char * msg, uint16_t value){
 void ESP8266_AT_Client::ESP8266_DEBUG(char * msg, char * value){
 #ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
   if((debugStream != NULL) && debugEnabled){
-    debugStream->print("Debug: ");
-    debugStream->print(msg);
-    debugStream->print("\"");
-    debugStream->print(value);
-    debugStream->println("\"");
+    debugstreamPrint("Debug: ");
+    debugstreamPrint(msg);
+    debugstreamPrint("\"");
+    debugstreamPrint(value);
+    debugstreamPrintln("\"");
     debugStream->flush();
   }
 #endif
@@ -1548,4 +1549,99 @@ void ESP8266_AT_Client::clearTargetMatchArray(void){
     target_match_array[ii][0] = NULL;
     target_match_lengths[ii] = 0;
   }
+}
+
+#define ___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___ (10)
+void ESP8266_AT_Client::streamPrint(const __FlashStringHelper * s){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(const String & s){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(const char s[]){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(char s){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(unsigned char s, int b){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(int s, int b){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(unsigned int s, int b){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(long s, int b){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(unsigned long s, int b){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(double s, int b){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrint(const Printable& s){
+  stream->print(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+
+void ESP8266_AT_Client::streamPrintln(const __FlashStringHelper * s){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(const String & s){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(const char s[]){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(char s){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(unsigned char s, int b){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(int s, int b){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(unsigned int s, int b){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(long s, int b){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(unsigned long s, int b){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(double s, int b){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(const Printable& s){
+  stream->println(s);
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+void ESP8266_AT_Client::streamPrintln(void){
+  stream->println();
+  delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
 }

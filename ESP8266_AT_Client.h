@@ -137,6 +137,31 @@ private:
   void ESP8266_DEBUG(char * msg);
   void ESP8266_DEBUG(char * msg, uint16_t value);
   void ESP8266_DEBUG(char * msg, char * value);
+
+  void streamPrint(const __FlashStringHelper *);
+  void streamPrint(const String &);
+  void streamPrint(const char[]);
+  void streamPrint(char);
+  void streamPrint(unsigned char, int = DEC);
+  void streamPrint(int, int = DEC);
+  void streamPrint(unsigned int, int = DEC);
+  void streamPrint(long, int = DEC);
+  void streamPrint(unsigned long, int = DEC);
+  void streamPrint(double, int = 2);
+  void streamPrint(const Printable&);
+
+  void streamPrintln(const __FlashStringHelper *);
+  void streamPrintln(const String &s);
+  void streamPrintln(const char[]);
+  void streamPrintln(char);
+  void streamPrintln(unsigned char, int = DEC);
+  void streamPrintln(int, int = DEC);
+  void streamPrintln(unsigned int, int = DEC);
+  void streamPrintln(long, int = DEC);
+  void streamPrintln(unsigned long, int = DEC);
+  void streamPrintln(double, int = 2);
+  void streamPrintln(const Printable&);
+  void streamPrintln(void);
 };
 
 #endif
