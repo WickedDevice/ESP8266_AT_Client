@@ -521,7 +521,15 @@ void ESP8266_AT_Client::stop(){
 
   readStreamUntil("OK", 100);
 
+  // reset the +IPD handling state variables
+  receive_state = WAITING_FOR_IPD;
+  num_characters_remaining_to_receive = 0;
   socket_connected = false;
+
+  // and drop all the remaining unread user buffer data
+  while(num_consumed_bytes_in_input_buffer > 0){
+    readFromInputBuffer();
+  }
 }
 
 /** Check if connected to server
@@ -1412,6 +1420,7 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
     clearTargetMatchArray();
     addStringToTargetMatchList("+IPD,");
     addStringToTargetMatchList("CLOSED");
+    addStringToTargetMatchList("UNLINK");
     addStringToTargetMatchList("OK");
     if(readStreamUntil(&match_index, 10)){
       if(match_index == 0){
@@ -1419,10 +1428,17 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
         receive_state = WAITING_FOR_COLON;
         ESP8266_DEBUG("Rx State = WAITING_FOR_COLON (3)");
       }
-      else if(match_index == 1){
-        // we got CLOSED
-        socket_connected = false;
+      else if((match_index == 1) || (match_index == 2)){
+        // we got CLOSED or UNLINK
         receive_state = WAITING_FOR_IPD;
+        num_characters_remaining_to_receive = 0;
+        socket_connected = false;
+
+        // and drop all the remaining unread user buffer data
+        while(num_consumed_bytes_in_input_buffer > 0){
+          readFromInputBuffer();
+        }
+
         ESP8266_DEBUG("Rx State = WAITING_FOR_IPD");
         return; // we're done here
       }
