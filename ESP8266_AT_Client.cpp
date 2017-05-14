@@ -1120,6 +1120,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
       if(debugStream != NULL && debugEnabled) debugstreamPrint(chr); // echo the received characters to the Serial Monitor
 #endif
+      // if(debugEnabled) Serial.print(chr); // a less complicated way to echo everything the ESP says
 
       // for each target match
       for(uint8_t ii = 0; ii < ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES; ii++){
