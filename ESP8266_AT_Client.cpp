@@ -1567,7 +1567,7 @@ void ESP8266_AT_Client::clearTargetMatchArray(void){
   }
 }
 
-#define ___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___ (10)
+#define ___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___ (0)
 void ESP8266_AT_Client::streamPrint(const __FlashStringHelper * s){
   stream->print(s);
   delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
