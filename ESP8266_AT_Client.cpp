@@ -1097,7 +1097,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
 
   if(initial_call){
     initial_call = false;
-    //debugstreamPrintln("\nbegin>");
+    //debugStream->println("\nbegin>");
   }
 
   while(!match_found){ // until a match is found
@@ -1110,7 +1110,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
 
       // NOTE: not sure we need to do this but this seems a better place for it than on _any_ character rx
       // the problem with that is that the timeout can be totally disregarded in softAP mode when a
-      // client is polling and we are waitin on a long timeout (e.g. 30 seconds for network connect)
+      // client is polling and we are waiting on a long timeout (e.g. 30 seconds for network connect)
       if(reset_timeout_on_possible_rx){
         previousMillis = millis(); // reset the timeout on any sequence-matching character received
       }
@@ -1118,7 +1118,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
       char chr = stream->read(); // read a character
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
-      if(debugStream != NULL && debugEnabled) debugstreamPrint(chr); // echo the received characters to the Serial Monitor
+      if(debugStream != NULL && debugEnabled) debugStream->print(chr); // echo the received characters to the Serial Monitor
 #endif
       // if(debugEnabled) Serial.print(chr); // a less complicated way to echo everything the ESP says
 
@@ -1159,7 +1159,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
           memset(match_char_idx, 0, ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES);
           local_target_buffer_index = 0;
           initial_call = true;
-          //debugstreamPrintln("<end");
+          //debugStream->println("<end");
           break;
         }
       }
@@ -1283,7 +1283,7 @@ void ESP8266_AT_Client::flushInput(){
     char chr = stream->read();
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
-    if(debugStream != NULL && debugEnabled) debugstreamPrintln((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor
+    if(debugStream != NULL && debugEnabled) debugStream->println((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor
 #endif
   }
 }
@@ -1320,10 +1320,14 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
   return ret;
 }
 
-boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms, void (*onConnect)(void)){
+boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms, void (*onConnect)(void), boolean permanent){
   flushInput();
 
-  streamPrint("AT+CWJAP_CUR=\"");
+  streamPrint("AT+CWJAP");
+  if(!permanent){
+    streamPrint("_CUR");
+  }
+  streamPrint("=\"");
   streamPrint(ssid);
   streamPrint("\",\"");
   streamPrint(pwd);
@@ -1518,8 +1522,8 @@ void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
 void ESP8266_AT_Client::ESP8266_DEBUG(char * msg){
 #ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
   if((debugStream != NULL) && debugEnabled){
-    debugstreamPrint("Debug: ");
-    debugstreamPrintln(msg);
+    debugStream->print("Debug: ");
+    debugStream->println(msg);
     debugStream->flush();
   }
 #endif
@@ -1528,9 +1532,9 @@ void ESP8266_AT_Client::ESP8266_DEBUG(char * msg){
 void ESP8266_AT_Client::ESP8266_DEBUG(char * msg, uint16_t value){
 #ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
   if((debugStream != NULL) && debugEnabled){
-    debugstreamPrint("Debug: ");
-    debugstreamPrint(msg);
-    debugstreamPrintln(value);
+    debugStream->print("Debug: ");
+    debugStream->print(msg);
+    debugStream->println(value);
     debugStream->flush();
   }
 #endif
@@ -1539,11 +1543,11 @@ void ESP8266_AT_Client::ESP8266_DEBUG(char * msg, uint16_t value){
 void ESP8266_AT_Client::ESP8266_DEBUG(char * msg, char * value){
 #ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
   if((debugStream != NULL) && debugEnabled){
-    debugstreamPrint("Debug: ");
-    debugstreamPrint(msg);
-    debugstreamPrint("\"");
-    debugstreamPrint(value);
-    debugstreamPrintln("\"");
+    debugStream->print("Debug: ");
+    debugStream->print(msg);
+    debugStream->print("\"");
+    debugStream->print(value);
+    debugStream->println("\"");
     debugStream->flush();
   }
 #endif
@@ -1661,4 +1665,111 @@ void ESP8266_AT_Client::streamPrintln(const Printable& s){
 void ESP8266_AT_Client::streamPrintln(void){
   stream->println();
   delay(___ESP8266_AT_CLIENT_STREAM_PRINT_DELAY_MS___);
+}
+
+// in the following example invocation pattern, timeout is obviously
+// managed separately, e.g. using a blinkWithoutDelay pattern
+//
+//    if(esp.firmwareUpdateBegin()){
+//      uint8_t status = 0xFF;
+//      while(esp.firmwareUpdateStatus(&status) && !timeout){
+//        if(status == 2){
+//          SUCCESS!!! // maybe keep waiting until you get "ready"
+//        }
+//        else if(status == 3){
+//          SUCCESS!!! // assuming you got 2 first, module reset is complete
+//        }
+//      }
+//      if(timeout){
+//        FAILURE!!! timeout happened
+//      }
+//      else if(status == 1){
+//        FAILURE!!! error happened
+//      }
+//    }
+//    else {
+//      FAILURE!!! firmware update never got started
+//    }
+
+boolean ESP8266_AT_Client::firmwareUpdateBegin(){
+  boolean ret = false;
+  flushInput();
+  streamPrint("AT+CIUPDATE");
+  streamPrint("\r\n");
+
+  clearTargetMatchArray();
+  addStringToTargetMatchList("+CIPUPDATE:1"); // 0
+  addStringToTargetMatchList("ERROR");        // 1
+  addStringToTargetMatchList("OK");           // 2
+  addStringToTargetMatchList("ready");        // 3
+
+  uint8_t match_index = 0xFF;
+  while(readStreamUntil(&match_index, 5000)){
+    if(match_index == 0){
+      ret = true;
+      break;
+    }
+    else if(match_index == 1){
+      break;
+    }
+  }
+
+  return ret;
+}
+
+// this function returns true as long as you don't get an ERROR response
+// it ASSUMES you will call firmwareUpdateBegin and then call this function
+// until it writes a STATUS of 2 (OK) into *status or it returns false (ERROR)
+// see example invocation above
+boolean ESP8266_AT_Client::firmwareUpdateStatus(uint8_t * status){
+  boolean ret = true;
+
+  uint8_t match_index = 0xFF;
+  while(readStreamUntil(&match_index, 5000)){
+    if(match_index == 1){ // ERROR index from firmwareUpdateBegin
+      ret = false;
+    }
+    break;
+  }
+
+  *status = match_index; // so the caller knows
+  return ret;
+}
+
+boolean ESP8266_AT_Client::getVersion(char * version){
+  boolean ret = false;
+
+  clearTargetMatchArray();
+  addStringToTargetMatchList("AT version:"); // connected
+  addStringToTargetMatchList("OK\r\n");
+  addStringToTargetMatchList("ERROR\r\n");
+
+  flushInput();
+  streamPrint("AT+GMR");
+  streamPrint("\r\n");
+
+  uint8_t match_index = 0xFF;
+  if(readStreamUntil(&match_index, 100)){
+    if(match_index == 0){
+      char tmp[16] = {0};
+      if(readStreamUntil("(", &(tmp[0]), 16, 10)){
+        strncpy(version, tmp, 15); // an mac address is at most 17 characters
+        ret = true;
+      }
+
+      readStreamUntil("OK", 100); // clear out the OK
+    }
+  }
+  else{
+    // Timeout
+  }
+
+  return ret;
+}
+
+boolean ESP8266_AT_Client::restoreDefault(){
+  flushInput();
+  streamPrint("AT+RESTORE");
+  streamPrint("\r\n");
+  return readStreamUntil("ready", 2000);
 }

@@ -30,7 +30,7 @@ public:
   void setInputBuffer(uint8_t * buf, uint16_t buf_length);
 
   boolean setNetworkMode(uint8_t mode);
-  boolean connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms = 60000, void (*onConnect)(void) = NULL);
+  boolean connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms = 60000, void (*onConnect)(void) = NULL, boolean permanent = false);
   boolean disconnectFromNetwork(void);
   boolean reset(void);
 
@@ -88,6 +88,11 @@ public:
   uint8_t connected(boolean actively_check);
   uint8_t connectedToNetwork();
   boolean listen(uint16_t port);
+
+  boolean firmwareUpdateBegin();
+  boolean firmwareUpdateStatus(uint8_t * status);
+  boolean getVersion(char * version);
+  boolean restoreDefault();
 
   operator bool();
 
