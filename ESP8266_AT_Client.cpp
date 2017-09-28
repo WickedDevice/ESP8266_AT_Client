@@ -1767,6 +1767,49 @@ boolean ESP8266_AT_Client::getVersion(char * version){
   return ret;
 }
 
+boolean ESP8266_AT_Client::getVersion(uint32_t * version){
+  boolean ret = false;
+  uint32_t value = 0;
+  char str[16] = {0};
+  uint8_t num_tokens = 0;
+  if(getVersion(str)){
+    char * token = strtok(str, ".");
+
+    while(token != NULL){
+      num_tokens++;
+      if(num_tokens > 4){
+        break;
+      }
+
+      if(strlen(token) < 3){
+        char * temp = NULL;
+        uint32_t octet = strtoul((char *) token, &temp, 10);
+        if (*temp == '\0'){
+          value += octet;
+        }
+        else{
+          break;
+        }
+
+        if(num_tokens != 4){
+          value *= 100;
+        }
+      }
+      else{
+        break;
+      }
+
+      token = strtok(NULL, ".");
+    }
+  }
+
+  if(num_tokens == 4){
+    *version = value;
+    return true;
+  }
+  return false;
+}
+
 boolean ESP8266_AT_Client::restoreDefault(){
   flushInput();
   streamPrint("AT+RESTORE");

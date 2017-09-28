@@ -92,6 +92,7 @@ public:
   boolean firmwareUpdateBegin();
   boolean firmwareUpdateStatus(uint8_t * status);
   boolean getVersion(char * version);
+  boolean getVersion(uint32_t * version);
   boolean restoreDefault();
 
   operator bool();

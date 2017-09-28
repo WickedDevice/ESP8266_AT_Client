@@ -24,7 +24,16 @@ void setup(void){
     Serial.println(version);
   }
   else{
-    Serial.println(F("Failed to get version"));
+    Serial.println(F("Failed to get version as string"));
+  }
+
+  uint32_t version_int = 0;
+  if(esp.getVersion(&version_int)){
+    Serial.print(F("Version: "));
+    Serial.println(version_int);
+  }
+  else{
+    Serial.println(F("Failed to get version as integer"));
   }
 }
 
