@@ -691,6 +691,7 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
 
 uint8_t ESP8266_AT_Client::connected(boolean actively_check){
   uint8_t ret = 1; // assume we are connected
+  uint8_t called_receive = 0;
   if(!socket_connected){
     return 0;
   }
@@ -711,6 +712,7 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
     // then you get "OK"
     if(num_characters_remaining_to_receive > 0){
       receive(true); // receive is already in progress
+      called_receive = true;
     }
     else{
       streamPrint("AT+CIPSTATUS");
@@ -727,6 +729,7 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
           break;
         case 4: // +IPD, gotta deal with it
           receive(true);
+          called_receive = true;
           break;
         case 0:
         case 1:
@@ -737,7 +740,7 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
         }
       }
 
-      if(match_index != 3){
+      if(!called_receive && match_index != 3){
         if(readStreamUntil(&match_index, 100)){
           if(match_index != 3){ //  != "OK"
              ESP8266_DEBUG("CIPSTATUS not OK");
