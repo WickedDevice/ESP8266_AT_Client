@@ -426,24 +426,14 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
 	@return 1 if exists, 0 if not exists
  */
 int ESP8266_AT_Client::available(){
-  int ret = 0;
   // an intent to read() is always preceded by a call to available(),
   // if the caller knows what is good for them,
-  // so this is where we need to perform the receive
-  // in a synchronous manner (with timeout)
-
-  // some state management needs to be encapsulated here as we'll only read one
-  // packet in at a time and we'll keep a 1500 byte buffer around to store
-  // the buffered data, hey maybe we can even implement peek correctly
+  // so this is where we need to perform asynchronous receipt of +IPD data
   while(stream->available()){
     streamReadChar();
   }
 
-  if(socket_connected || listener_started){    
-    ret = num_consumed_bytes_in_input_buffer;
-  }
-
-  return ret;
+  return num_consumed_bytes_in_input_buffer;
 }
 
 /** Read a character from stream
@@ -1759,13 +1749,13 @@ void ESP8266_AT_Client::handleIncoming(void){
     if(stream->available()){
       previous_time = current_time;
       uint8_t b = stream->read();
-      if(!writeToInputBuffer(b)){
-        // TODO: complain _really_ loudly if this happens      
-        return; // out of space in application buffer        
+      if(writeToInputBuffer(b)){
+        num_bytes_expected--;
       }
       else{
-        num_bytes_expected--;
-      }      
+        // TODO: complain _really_ loudly if this happens      
+        return; // out of space in application buffer                
+      }
     }
     else{
       if (current_time - previous_time >= timeout_interval){
@@ -1781,7 +1771,9 @@ void ESP8266_AT_Client::handleIncoming(void){
 // this self-contained state machine should be called with _every_ incoming byte
 // it returns true if the sequence IPD+, is received
 // when that happens the state machine also resets / clears
-// should also handle CLOSED and UNLINK receipts
+// should also handle CLOSED and UNLINK receipt handling
+// this is implemented using a switch statement acting as a jump table
+// with the intention of it being speedy
 boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){   
   static char lastCharAccepted = ' ';
   static uint8_t pursuitString = 0; 
@@ -1798,13 +1790,13 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
   case 0: // not yet in pursuit
     switch(c){
     case '+': // +IPD,
-      pursuitString = 1; lastCharAccepted = ' ';
+      pursuitString = 1; lastCharAccepted = c;
       break;
     case 'C': // CLOSED,
-      pursuitString = 2; lastCharAccepted = ' ';
+      pursuitString = 2; lastCharAccepted = c;
       break;
     case 'U': // UNLINK
-      pursuitString = 3; pursuitDepth = 1; lastCharAccepted = ' ';
+      pursuitString = 3; pursuitDepth = 1; lastCharAccepted = c;
       break;                
     }
     // intentionally leaving out default case here so we don't 
@@ -1879,7 +1871,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
         if(c == 'L') { lastCharAccepted = c; pursuitDepth++; }
         else { pursuitString = 0; lastCharAccepted = ' '; }
       }
-      else { // after the second N in UNLINK
+      else if(pursuitDepth == 5){ // after the second N in UNLINK
         if(c == 'K'){
           // handle seeing UNLINK
           socket_connected = false;
@@ -1887,20 +1879,21 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
         // unconditionally clear the state machine after 'K'
         pursuitString = 0; lastCharAccepted = ' ';
       }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
       break;
     case 'L':
-      if(c == 'I') { lastCharAccepted = c; }
+      if(c == 'I') { lastCharAccepted = c; pursuitDepth++; }
       else { pursuitString = 0; lastCharAccepted = ' '; }
       break;
     case 'I':
-      if(c == 'N') { lastCharAccepted = c; }
+      if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
       else { pursuitString = 0; lastCharAccepted = ' '; }
       break;      
     default: 
       pursuitString = 0; lastCharAccepted = ' ';
       break;
     }
-    break; 
+    break;
   default:
     pursuitString = 0; lastCharAccepted = ' ';
     break;
