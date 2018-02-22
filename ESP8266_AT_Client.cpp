@@ -1772,6 +1772,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
   numIncomingBytesPending = strtoul(num_bytes_str, &temp, 10);
   if (*temp != '\0'){
     // TODO: complain loudly if this happens
+    numIncomingBytesPending = 0;
     return; // failed to parse length
   }
 }
