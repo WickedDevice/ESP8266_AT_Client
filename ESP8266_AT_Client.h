@@ -120,11 +120,14 @@ private:
   char target_match_array[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1];
   char target_match_lengths[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1];
   
-  void handleIncoming(void);             // should be called anytime right after you see +IPD,
+  void processIncomingUpToColon(void);   // should be called anytime right after you see +IPD,
+  boolean processIncomingAfterColon(void);  // should be called frequently (as in non-blocking implementation), while incoming data is pending
+  uint32_t numIncomingBytesPending = 0;  // this should be counted down to zero by processIncomingAfterColon  
   boolean updatePlusIpdState(uint8_t c); // anytime a character is received this should be called with that caracter as an argument 
                                          // returns true if handleIncoming should be called
   int16_t streamReadChar(void);          // should only be called if it is known that there are bytes available
                                          // returns (int16_t) -1 if processing was interrupted by +IPD handling
+  void waitForIncomingDataToComplete(void); // just calls processIncomingAfterColon in a spin loop, with timeout
 
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
