@@ -1879,7 +1879,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
   uint8_t num_bytes_write_idx = 0;
   boolean gotColon = false;
 
-  // treat it as an error if (num_bytes_write_idx == 15) // overflow
+  // treat it as an error if (num_bytes_write_idx == 8) // overflow
   // or if if (current_time - previous_time >= interval) // timeout
   // update current_time on an ongoing basis
   // assign previous_time to current_time anytime a byte is received to prolong timeout
@@ -1897,7 +1897,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
       printDebugWindow();
     }
     
-    while(bytesAvailable > 0){
+    while(bytesAvailable > 0 && !gotColon){
       bytesAvailable--;
       previous_time = current_time;
       unsigned char b = stream->read() & 0xff;
