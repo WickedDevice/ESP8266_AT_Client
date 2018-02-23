@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 #include <Client.h>
+#include <Stream.h>
+#include <Print.h>
 
 #define ESP8266_AT_CLIENT_MAX_STRING_LENGTH      (32)
 #define ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES (5)
@@ -99,7 +101,8 @@ public:
 
   boolean addStringToTargetMatchList(char * str);
 private:
-  Stream * stream;      // where AT commands are sent and responses received
+  Stream * stream;       // where AT commands are sent and responses received
+  Print * streamAsPrint; // in order to check for available space in output buffer
   Stream * debugStream; // where Debug messages go
   boolean debugEnabled;
 
@@ -128,7 +131,12 @@ private:
   int16_t streamReadChar(void);          // should only be called if it is known that there are bytes available
                                          // returns (int16_t) -1 if processing was interrupted by +IPD handling
   void waitForIncomingDataToComplete(void); // just calls processIncomingAfterColon in a spin loop, with timeout
-
+  
+  size_t streamWrite(const char * str);
+  size_t streamWrite(uint32_t value);
+  size_t streamWrite(int32_t value);
+  size_t streamWrite(const uint8_t *buf, size_t sz); // write a buffer of known size to the stream
+  
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
   uint8_t readFromInputBuffer(void);
@@ -149,31 +157,15 @@ private:
   void ESP8266_DEBUG(char * msg);
   void ESP8266_DEBUG(char * msg, uint16_t value);
   void ESP8266_DEBUG(char * msg, char * value);
-
-  void streamPrint(const __FlashStringHelper *);
-  void streamPrint(const String &);
-  void streamPrint(const char[]);
-  void streamPrint(char);
-  void streamPrint(unsigned char, int = DEC);
-  void streamPrint(int, int = DEC);
-  void streamPrint(unsigned int, int = DEC);
-  void streamPrint(long, int = DEC);
-  void streamPrint(unsigned long, int = DEC);
-  void streamPrint(double, int = 2);
-  void streamPrint(const Printable&);
-
-  void streamPrintln(const __FlashStringHelper *);
-  void streamPrintln(const String &s);
-  void streamPrintln(const char[]);
-  void streamPrintln(char);
-  void streamPrintln(unsigned char, int = DEC);
-  void streamPrintln(int, int = DEC);
-  void streamPrintln(unsigned int, int = DEC);
-  void streamPrintln(long, int = DEC);
-  void streamPrintln(unsigned long, int = DEC);
-  void streamPrintln(double, int = 2);
-  void streamPrintln(const Printable&);
-  void streamPrintln(void);
+  
+  static uint8_t* debug_read_window;
+  static uint16_t debug_read_window_index;
+  static uint8_t* debug_write_window;
+  static uint16_t debug_write_window_index;
+  static void printDebugWindow(void);
+  static void addToDebugReadWindow(uint8_t b);
+  static void addToDebugWriteWindow(uint8_t b);
+  static uint16_t bytesAvailableMax;
 };
 
 #endif
