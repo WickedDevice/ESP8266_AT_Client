@@ -4,7 +4,9 @@
 
 // #define ESP8266_AT_CLIENT_ENABLE_DEBUG
 // #define ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
-#define ESP8266_AT_CLIENT_DEBUG_INCOMING
+// #define ESP8266_AT_CLIENT_DEBUG_OUTGOING
+// #define ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES
+// #define ESP8266_AT_CLIENT_DEBUG_INCOMING
 
 static uint16_t ESP8266_AT_Client::bytesAvailableMax = 0;
 #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)
@@ -174,9 +176,12 @@ boolean ESP8266_AT_Client::reset(void){
     ESP8266_DEBUG("Received 'ready'");
   }
   else{
-    ESP8266_DEBUG("Panic");
+
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
     Serial.println("PANIC6");
     printDebugWindow();
+#endif
+
     return false;
   }
 
@@ -570,11 +575,13 @@ int ESP8266_AT_Client::available(){
     ESP8266_AT_Client::bytesAvailableMax = bytesAvailable;
   }
 
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)            
   if(bytesAvailable > 50){
     // TODO: complain loudly if this happens 
     Serial.println("PANIC13");      
     printDebugWindow();
   }        
+#endif    
 
   if(bytesAvailable > 0){
     while(stream->available()){    
@@ -1231,11 +1238,13 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
       ESP8266_AT_Client::bytesAvailableMax = bytesAvailable;
     }    
 
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
     if(bytesAvailable > 50){
       // TODO: complain loudly if this happens 
       Serial.println("PANIC11");      
       printDebugWindow();
     }
+#endif
 
     if(bytesAvailable > 0){
 
@@ -1317,6 +1326,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
   // delayMicroseconds(10); // i'm not sure why, but it's more well behaved with this delay injected
                          // one theory is that it gives the Serial output time to clear?
 
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)            
   if(!match_found){
     Serial.println("PANIC7");
     Serial.println("+++");
@@ -1331,6 +1341,7 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
     Serial.println("===");   
     printDebugWindow(); 
   }
+#endif  
                          
   return match_found;
 }
@@ -1438,11 +1449,13 @@ void ESP8266_AT_Client::flushInput(){
     ESP8266_AT_Client::bytesAvailableMax = bytesAvailable;
   }      
 
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)           
   if(bytesAvailable > 50){
     // TODO: complain loudly if this happens 
     Serial.println("PANIC12");      
     printDebugWindow();
   } 
+#endif
 
   if(bytesAvailable > 0){  
     while(stream->available() > 0){    
@@ -1771,33 +1784,41 @@ boolean ESP8266_AT_Client::restoreDefault(){
 }
 
 size_t ESP8266_AT_Client::streamWrite(const char * str){
+#if defined(ESP8266_AT_CLIENT_DEBUG_OUTGOING)
   Serial.print("SEND S: ");
   Serial.println(str);
+#endif  
   return streamWrite((uint8_t * ) str, strlen(str));
 }
 
 size_t ESP8266_AT_Client::streamWrite(int32_t value){
   char str[16] = {0};
   ltoa(value, str, 10);
+#if defined(ESP8266_AT_CLIENT_DEBUG_OUTGOING)  
   Serial.print("SEND L: ");
   Serial.print(value);  
   Serial.print(' ');
   Serial.println(str);
+#endif  
   return streamWrite((uint8_t * ) str, strlen(str));
 }
 
 size_t ESP8266_AT_Client::streamWrite(uint32_t value){
   char str[16] = {0};
   ultoa(value, str, 10);
+#if defined(ESP8266_AT_CLIENT_DEBUG_OUTGOING)  
   Serial.print("SEND UL: ");
   Serial.print(value);  
   Serial.print(' ');
   Serial.println(str);  
+#endif  
   return streamWrite((uint8_t * ) str, strlen(str));
 }
 
 size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){    
   size_t bytes_written = 0;
+
+#if defined(ESP8266_AT_CLIENT_DEBUG_OUTGOING)  
   Serial.print("SEND B: ");  
   Serial.print(sz);   
   for(uint16_t ii = 0; ii < sz; ii++){
@@ -1807,6 +1828,7 @@ size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){
     Serial.print(b, HEX);    
   }
   Serial.println();
+#endif  
 
   while(sz > 0){
     size_t availableForWrite = streamAsPrint->availableForWrite();
@@ -1891,11 +1913,13 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
       ESP8266_AT_Client::bytesAvailableMax = bytesAvailable;
     }     
 
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)           
     if(bytesAvailable > 50){
       // TODO: complain loudly if this happens 
       Serial.println("PANIC9");      
       printDebugWindow();
     }
+#endif    
     
     while((bytesAvailable > 0) && !gotColon){
       bytesAvailable--;
@@ -1927,15 +1951,21 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
       }
       else{
         // TODO: complain loudly if this happens
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)                   
         Serial.println("PANIC1");
         printDebugWindow();
+#endif  
+
         return; // overflow
       }
 
       if (!gotColon && (current_time - previous_time >= timeout_interval)){
         // TODO: complain loudly if this happens      
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)                   
         Serial.println("PANIC2");
         printDebugWindow();
+#endif
+
         return; // timeout
       }
     }
@@ -1948,6 +1978,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
   numIncomingBytesPending = strtoul(&num_bytes_str[0], &temp, 10);
   if (*temp != '\0'){
     // TODO: complain loudly if this happens
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)               
     Serial.println("PANIC3");
     Serial.print("num_bytes_str was \"");
     Serial.print(num_bytes_str);
@@ -1964,6 +1995,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
       }
     }
     printDebugWindow();
+#endif    
     numIncomingBytesPending = 0;
     return; // failed to parse length
   }
@@ -1985,11 +2017,13 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
       ESP8266_AT_Client::bytesAvailableMax = bytesAvailable;
     }     
 
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)      
     if(bytesAvailable > 50){
       // TODO: complain loudly if this happens 
       Serial.println("PANIC10");      
       printDebugWindow();
     }
+#endif    
 
     while(bytesAvailable > 0){
       bytesAvailable--;
@@ -2014,9 +2048,11 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
       }
       else {
         // TODO: complain _really_ loudly if this happens      
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)              
         Serial.println("PANIC4");
         printDebugWindow();
         numIncomingBytesPending = 0; // the transfer has failed
+#endif        
         return false; // out of space in application buffer                
       }
 
@@ -2047,8 +2083,11 @@ void ESP8266_AT_Client::waitForIncomingDataToComplete(void){
     }
     else if (current_time - previous_time >= timeout_interval){
       // TODO: complain _really_ loudly if this happens
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)            
       Serial.println("PANIC5");
       printDebugWindow();
+#endif
+      
       // probably the connection is lost
       socket_connected = false;
       numIncomingBytesPending = 0; // give up
@@ -2057,11 +2096,14 @@ void ESP8266_AT_Client::waitForIncomingDataToComplete(void){
     }
   }
 
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)      
   if(dataWasIncoming && (numIncomingBytesPending > 0)){
     // TODO: complain _really_ loudly if this happens
     Serial.println("PANIC8");
     printDebugWindow();
   }
+#endif
+
 }
 
 // this self-contained state machine should be called with _every_ incoming byte
