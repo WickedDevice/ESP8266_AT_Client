@@ -576,7 +576,7 @@ int ESP8266_AT_Client::available(){
     printDebugWindow();
   }        
 
-  if(bytesAvailable){
+  if(bytesAvailable > 0){
     while(stream->available()){    
       streamReadChar();
     }
@@ -1897,7 +1897,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
       printDebugWindow();
     }
     
-    while(bytesAvailable > 0 && !gotColon){
+    while((bytesAvailable > 0) && !gotColon){
       bytesAvailable--;
       previous_time = current_time;
       unsigned char b = stream->read() & 0xff;
@@ -1932,7 +1932,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
         return; // overflow
       }
 
-      if (current_time - previous_time >= timeout_interval){
+      if (!gotColon && (current_time - previous_time >= timeout_interval)){
         // TODO: complain loudly if this happens      
         Serial.println("PANIC2");
         printDebugWindow();
@@ -1952,7 +1952,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
     Serial.print("num_bytes_str was \"");
     Serial.print(num_bytes_str);
     Serial.println("\"");
-    for(uint8_t ii = 0; ii < strlen(num_bytes_str); ii++){
+    for(uint16_t ii = 0; ii < strlen(num_bytes_str); ii++){
       uint8_t b = num_bytes_str[ii];
       if(isprint(b) || isspace(b)){
         Serial.print((char) b);
@@ -1996,6 +1996,7 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
 
       uint8_t b = stream->read() & 0xff;
       addToDebugReadWindow(b);
+
 #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)      
       if(debugEnabled){        
         if(isprint(b) || isspace(b)) Serial.print((char) b);
@@ -2005,7 +2006,8 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
           Serial.println(b&0xff, HEX);
         }
       }
-#endif      
+#endif
+
       if(writeToInputBuffer(b)){
         ret = true;
         numIncomingBytesPending--;
@@ -2016,6 +2018,12 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
         printDebugWindow();
         numIncomingBytesPending = 0; // the transfer has failed
         return false; // out of space in application buffer                
+      }
+
+      if(numIncomingBytesPending == 0){
+        // in this case we should stop processing bytes
+        // we don't want to consume more bytes than were incoming in this function!
+        break;
       }
     }
   }
