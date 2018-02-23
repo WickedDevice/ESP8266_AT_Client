@@ -1800,7 +1800,7 @@ size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){
   size_t bytes_written = 0;
   Serial.print("SEND B: ");  
   Serial.print(sz);   
-  for(uint8_t ii = 0; ii < sz; ii++){
+  for(uint16_t ii = 0; ii < sz; ii++){
     uint8_t b = buf[ii] & 0xff;        
     Serial.print(" 0x");
     if(b < 0x10) Serial.print('0');
