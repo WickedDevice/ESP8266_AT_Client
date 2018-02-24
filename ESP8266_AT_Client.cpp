@@ -248,7 +248,6 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
 
   int ret = 2; // initialize to error
   socket_connected = false;
-  wifi_is_connected = false;
   listener_started = false;
 
   ESP8266_DEBUG("Connecting to ", (char *) host);
@@ -1512,8 +1511,7 @@ boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t tim
   streamWrite("\r\n");
 
   // wait for connected status
-  if(readStreamUntil("WIFI CONNECTED", timeout_ms, false)){
-
+  if(readStreamUntil("WIFI CONNECTED", timeout_ms, false)){  
     ESP8266_DEBUG("Connected to Network");
     if(onConnect != NULL){
       onConnect();
@@ -1523,19 +1521,23 @@ boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t tim
        ESP8266_DEBUG("Got IP");
 
        if(readStreamUntil("OK")){
+         wifi_is_connected = true;
          return true;
        }
     }
     else{
        ESP8266_DEBUG("Failed to get IP address");
+       wifi_is_connected = false;
        return false;
     }
   }
   else{
      ESP8266_DEBUG("Failed to connect to Network");
+     wifi_is_connected = false;
      return false;
   }
 
+  wifi_is_connected = false;
   return false;
 }
 
