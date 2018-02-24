@@ -96,6 +96,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin){
   this->stream = &Serial; // default assumption
   this->streamAsPrint = (Print *) this->stream;
   this->socket_connected = false;
+  this->wifi_is_connected = false;
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
@@ -114,6 +115,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
   this->stream = stream;
   this->streamAsPrint = (Print *) this->stream;
   this->socket_connected = false;
+  this->wifi_is_connected = false;
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
@@ -132,6 +134,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_
   this->stream = stream;
   this->streamAsPrint = (Print *) this->stream;
   this->socket_connected = false;
+  this->wifi_is_connected = false;
   this->listener_started = false;
   this->input_buffer = buf;
   this->input_buffer_length = buf_length;
@@ -163,6 +166,7 @@ boolean ESP8266_AT_Client::reset(void){
   numIncomingBytesPending = 0;
 
   socket_connected = false;
+  wifi_is_connected = false;
   listener_started = false;
 
   pinMode(enable_pin, OUTPUT);
@@ -244,6 +248,7 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
 
   int ret = 2; // initialize to error
   socket_connected = false;
+  wifi_is_connected = false;
   listener_started = false;
 
   ESP8266_DEBUG("Connecting to ", (char *) host);
@@ -344,6 +349,10 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
       if(match_index == 0){
         ret = true;
         break;
+      }
+
+      if(match_index == 2){
+        wifi_is_connected = true;
       }
     }
   }
@@ -878,30 +887,13 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
   return ret;
 }
 
-uint8_t ESP8266_AT_Client::connectedToNetwork(void){
-  uint8_t ret = 0;
+uint8_t ESP8266_AT_Client::connectedToNetwork(void){  
+  // TODO: this should just be goverened by a state variable
+  // and the updatePlusIpdState state machine should basically just watch
+  // for WIFI	DISCONNECT to clear the state variable rather than 
+  // actively interrogating the ESP for this information
 
-  clearTargetMatchArray();
-  addStringToTargetMatchList("+CWJAP_CUR:"); // connected
-  addStringToTargetMatchList("No AP"); // disconnected
-  addStringToTargetMatchList("OK\r\n");
-
-  waitForIncomingDataToComplete();
-  streamWrite("AT+CWJAP_CUR?");
-  streamWrite("\r\n");
-
-  uint8_t match_index = 0xFF;
-  while(readStreamUntil(&match_index, 500)){
-    if(match_index == 0){
-      ret = 1;
-    }
-
-    if(match_index == 2){
-      break;
-    }
-  }
-
-  return ret;
+  return wifi_is_connected;
 }
 
 boolean ESP8266_AT_Client::getIPAddress(char * ip_str, char * gateway_str, char * netmask_str){
@@ -2121,6 +2113,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
   // pursuitString = 1 is the pursuit of '+IPD,'
   // pursuitString = 2 is the pursuit of 'CLOSED'
   // pursuitString = 3 is the pursuit of 'UNLINK'
+  // pursuitString = 4 is the pursuit of 'WIFI DISCONNECT'
   boolean ret = false;
   char c = (char) chr;
 
@@ -2135,7 +2128,10 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;
     case 'U': // UNLINK
       pursuitString = 3; pursuitDepth = 1; lastCharAccepted = c;
-      break;                
+      break;   
+    case 'W': // WIFI DISCONNECT
+      pursuitString = 4; pursuitDepth = 1; lastCharAccepted = c;
+      break;
     }
     // intentionally leaving out default case here so we don't 
     // needlessly execute code on every byte received
@@ -2229,6 +2225,84 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
       else { pursuitString = 0; lastCharAccepted = ' '; }
       break;      
+    default: 
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    }
+    break;
+  case 4:
+    switch(lastCharAccepted){
+    case 'W':
+      if(c == 'I') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;      
+    case 'I':
+      if(pursuitDepth == 2){ // after the first I in 'WIFI DISCONNECT'
+                             //                       0123456789abcde
+        if(c == 'F') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }
+      else if(pursuitDepth == 4){ // after the second I in 'WIFI DISCONNECT'
+        if(c == ' ') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }
+      else if(pursuitDepth == 7){
+        if(c == 'S') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }        
+      }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'F':
+      if(c == 'I') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;         
+    case ' ':
+      if(c == 'D') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;    
+    case 'D':
+      if(c == 'I') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;      
+    case 'S':
+      if(c == 'C') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'C':
+      if(pursuitDepth == 0x9){ // after the first N in 'WIFI DISCONNECT'
+                               //                       0123456789abcde
+        if(c == 'O') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }
+      else if(pursuitDepth == 0xe){ // after the second N in 'WIFI DISCONNECT'
+        if(c == 'T') { 
+          // this is a goal state
+          wifi_is_connected = false;
+        }
+        pursuitString = 0; lastCharAccepted = ' ';
+      }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;                                
+    case 'O':
+      if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;  
+    case 'N':
+      if(pursuitDepth == 0xb){ // after the first N in 'WIFI DISCONNECT'
+                               //                       0123456789abcde
+        if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }
+      else if(pursuitDepth == 0xc){ // after the second N in 'WIFI DISCONNECT'
+        if(c == 'E') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;          
+    case 'E':
+      if(c == 'C') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;       
     default: 
       pursuitString = 0; lastCharAccepted = ' ';
       break;
