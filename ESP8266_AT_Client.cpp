@@ -2237,6 +2237,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       else { pursuitString = 0; lastCharAccepted = ' '; }
       break;      
     case 'I':
+                             //                         v v  v
       if(pursuitDepth == 2){ // after the first I in 'WIFI DISCONNECT'
                              //                       0123456789abcde
         if(c == 'F') { lastCharAccepted = c; pursuitDepth++; }
@@ -2246,7 +2247,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
         if(c == ' ') { lastCharAccepted = c; pursuitDepth++; }
         else { pursuitString = 0; lastCharAccepted = ' '; }
       }
-      else if(pursuitDepth == 7){
+      else if(pursuitDepth == 7){ // after the third I in 'WIFI DISCONNECT'
         if(c == 'S') { lastCharAccepted = c; pursuitDepth++; }
         else { pursuitString = 0; lastCharAccepted = ' '; }        
       }
@@ -2268,17 +2269,18 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       if(c == 'C') { lastCharAccepted = c; pursuitDepth++; }
       else { pursuitString = 0; lastCharAccepted = ' '; }
       break;
-    case 'C':
-      if(pursuitDepth == 0x9){ // after the first N in 'WIFI DISCONNECT'
+    case 'C':                  //                                v    v
+      if(pursuitDepth == 0x9){ // after the first C in 'WIFI DISCONNECT'
                                //                       0123456789abcde
         if(c == 'O') { lastCharAccepted = c; pursuitDepth++; }
         else { pursuitString = 0; lastCharAccepted = ' '; }
       }
-      else if(pursuitDepth == 0xe){ // after the second N in 'WIFI DISCONNECT'
+      else if(pursuitDepth == 0xe){ // after the second C in 'WIFI DISCONNECT'
         if(c == 'T') { 
           // this is a goal state
           wifi_is_connected = false;
         }
+        // unconditionally clear the state machine after 'T'
         pursuitString = 0; lastCharAccepted = ' ';
       }
       else { pursuitString = 0; lastCharAccepted = ' '; }
@@ -2286,8 +2288,8 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
     case 'O':
       if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
       else { pursuitString = 0; lastCharAccepted = ' '; }
-      break;  
-    case 'N':
+      break;
+    case 'N':                  //                                  vv
       if(pursuitDepth == 0xb){ // after the first N in 'WIFI DISCONNECT'
                                //                       0123456789abcde
         if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
