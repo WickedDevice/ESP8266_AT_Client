@@ -2281,6 +2281,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
         if(c == 'T') { 
           // this is a goal state
           wifi_is_connected = false;
+          socket_connected = false; // that too
         }
         // unconditionally clear the state machine after 'T'
         pursuitString = 0; lastCharAccepted = ' ';
