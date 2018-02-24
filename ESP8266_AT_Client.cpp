@@ -640,8 +640,7 @@ void ESP8266_AT_Client::flush(){
 
 /** Stop client
  */
-void ESP8266_AT_Client::stop(){
-
+void ESP8266_AT_Client::stop(){  
   if(socket_connected || (socket_type == ESP8266_UDP) || listener_started){
 
     // set up an AT command and send it
@@ -676,6 +675,8 @@ void ESP8266_AT_Client::stop(){
   while(num_consumed_bytes_in_input_buffer > 0){
     readFromInputBuffer();
   }
+
+  socket_connected = false;
 
 }
 
