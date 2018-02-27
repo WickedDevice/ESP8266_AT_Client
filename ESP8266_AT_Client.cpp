@@ -194,6 +194,8 @@ boolean ESP8266_AT_Client::reset(void){
   socket_connected = false;
   wifi_is_connected = false;
   listener_started = false;
+  ok_flag = false;
+  error_flag = false;
 
   pinMode(enable_pin, OUTPUT);
   digitalWrite(enable_pin, LOW);
@@ -202,20 +204,30 @@ boolean ESP8266_AT_Client::reset(void){
 
   ESP8266_DEBUG("ESP8266 Hello World.");
 
-  if(readStreamUntil("ready", 10000)){
-    ESP8266_DEBUG("Received 'ready'");
-  }
-  else{
+  // wait for ok or error or timeout
+  // because 'ready' triggers the ok_flag
+  const int32_t interval = 10000;
+  uint32_t current_millis = millis();
+  uint32_t previous_millis = current_millis;
+  boolean timeout_flag = false;
+  while(!error_flag && !ok_flag && !timeout_flag){ // TODO: add timeout, else this _could_ be an infinite loop
+    current_millis = millis();
 
+    int16_t b = streamReadChar();
+    if(b > 0){
+      previous_millis = current_millis;      
+    }          
+
+    if (current_millis - previous_millis >= interval) {
+      timeout_flag = true;
 #if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
-    Serial.println("PANIC6");
-    printDebugWindow();
+      Serial.println("PANIC6");
+      printDebugWindow();
 #endif
+    }  
+  }  
 
-    return false;
-  }
-
-  return true;
+  return ok_flag;
 }
 
 /** Set the stream where AT commands are sent and responses received
@@ -1225,190 +1237,6 @@ boolean ESP8266_AT_Client::addStringToTargetMatchList(char * str){
   return false;
 }
 
-// pass in an array of strings to match against
-// the list is presumed to be terminated by a NULL string
-// this function can only handle up to ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES matching targets
-boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx){
-  boolean match_found = false;
-  uint16_t local_target_buffer_index = 0;
-  uint8_t match_char_idx[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES] = {0};
-  unsigned long previousMillis = millis();
-  boolean first_match_character_received = false;
-
-#ifdef ESP8266_AT_CLIENT_ENABLE_DEBUG
-  if((debugStream != NULL) && debugEnabled){
-    ESP8266_DEBUG("+++");
-    for(uint8_t ii = 0; ii < ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES; ii++){
-      uint16_t target_match_length = target_match_lengths[ii];
-      if(target_match_length == 0){
-        break;
-      }
-      ESP8266_DEBUG("  Waiting for ", target_match_array[ii]);
-    }
-    ESP8266_DEBUG("===");
-  }
-#endif
-
-  while(!match_found){ // until a match is found
-    unsigned long currentMillis = millis();
-    if((timeout_ms > 0) && (currentMillis - previousMillis >= timeout_ms)){
-       break;
-    }
-
-    uint8_t bytesAvailable = stream->available();    
-    if(bytesAvailable > ESP8266_AT_Client::bytesAvailableMax){
-      ESP8266_AT_Client::bytesAvailableMax = bytesAvailable;
-    }    
-
-#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
-    if(bytesAvailable > 50){
-      // TODO: complain loudly if this happens 
-      Serial.println("PANIC11");      
-      printDebugWindow();
-    }
-#endif
-
-    if(bytesAvailable > 0){
-
-      // NOTE: not sure we need to do this but this seems a better place for it than on _any_ character rx
-      // the problem with that is that the timeout can be totally disregarded in softAP mode when a
-      // client is polling and we are waiting on a long timeout (e.g. 30 seconds for network connect)
-      if(reset_timeout_on_possible_rx){
-        previousMillis = millis(); // reset the timeout on any sequence-matching character received
-      }
-
-      int chr = streamReadChar(); // read a character      
-      if(chr == -1){
-        // reset the timeout if this happens
-        previousMillis = millis(); 
-        continue;
-      }
-      
-#ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
-      if(debugStream != NULL && debugEnabled) debugStream->print(chr); // echo the received characters to the Serial Monitor
-#endif
-      // if(debugEnabled) Serial.print(chr); // a less complicated way to echo everything the ESP says
-
-      // for each target match
-      for(uint8_t ii = 0; ii < ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES; ii++){
-        uint16_t target_match_length = target_match_lengths[ii];
-        // an empty string in the list signals the end of the list
-        if(target_match_length == 0){
-          break;
-        }
-
-        // if the current character is a match for this string
-        // advance it's match index,
-        // otherwise reset its match index
-        if(chr == target_match_array[ii][match_char_idx[ii]]){
-           match_char_idx[ii]++;
-        }
-        else{
-           match_char_idx[ii] = 0;
-        }
-
-        // if the match index is equal to the length of the string
-        // then it's a complete match
-        // return the string index that matched into match_idx
-        // and return true to the caller
-        if(match_char_idx[ii] >= target_match_length){
-          *match_idx = ii;
-          match_found = true;
-
-          // copy the collected local data into the caller's buffer
-          if(target_buffer != NULL){
-            if(local_target_buffer_index > target_buffer_length){
-              ESP8266_DEBUG("Warn: caller's buffer is smaller than needed to contain", target_buffer);
-            }
-          }
-
-          // reset the stateful variables
-          memset(match_char_idx, 0, ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES);
-          local_target_buffer_index = 0;
-          break;
-        }
-      }
-
-      if(!match_found && target_buffer != NULL){
-        if(local_target_buffer_index < target_buffer_length - 1){
-          target_buffer[local_target_buffer_index++] = chr;
-        }
-        else{
-          ESP8266_DEBUG("Target buffer would overflow");
-          break; // target buffer overflow
-        }
-      }
-    }
-  }
-
-  ESP8266_DEBUG("*** ", (uint8_t) match_found);
-  ESP8266_DEBUG("==> ", (uint8_t) *match_idx);
-  // delayMicroseconds(10); // i'm not sure why, but it's more well behaved with this delay injected
-                         // one theory is that it gives the Serial output time to clear?
-
-#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)            
-  if(!match_found){
-    Serial.println("PANIC7");
-    Serial.println("+++");
-    for(uint8_t ii = 0; ii < ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES; ii++){
-      uint16_t target_match_length = target_match_lengths[ii];
-      if(target_match_length == 0){
-        break;
-      }
-      Serial.print("  Waiting for ");
-      Serial.println(target_match_array[ii]);
-    }
-    Serial.println("===");   
-    printDebugWindow(); 
-  }
-#endif  
-                         
-  return match_found;
-}
-
-// pass a single string to match against
-// the string must not be longer than 31 characters
-boolean ESP8266_AT_Client::readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx){
-  uint8_t dummy_return;
-
-  if(strlen(target_match) > 31){
-    return false;
-  }
-  else{
-    clearTargetMatchArray();
-    addStringToTargetMatchList(target_match);
-    return readStreamUntil(&dummy_return, target_buffer, target_buffer_length, timeout_ms, reset_timeout_on_possible_rx);
-  }
-}
-
-boolean ESP8266_AT_Client::readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
-  return readStreamUntil(target_match, target_buffer, target_buffer_length, timeout_ms, true); // reset timeout on possible rx
-}
-
-boolean ESP8266_AT_Client::readStreamUntil(char * target_match, int32_t timeout_ms, boolean reset_timeout_on_possible_rx){
-  return readStreamUntil(target_match, NULL, 0, timeout_ms, reset_timeout_on_possible_rx);
-}
-
-boolean ESP8266_AT_Client::readStreamUntil(char * target_match, int32_t timeout_ms){
-  return readStreamUntil(target_match, NULL, 0, timeout_ms);
-}
-
-boolean ESP8266_AT_Client::readStreamUntil(char * target_match){
-  return readStreamUntil(target_match, -1);
-}
-
-boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms){
-    return readStreamUntil(match_idx, target_buffer, target_buffer_length, timeout_ms, true); // reset timeout on possible rx
-}
-
-boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, int32_t timeout_ms){
-  return readStreamUntil(match_idx, NULL, 0, timeout_ms);
-}
-
-boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx){
-  return readStreamUntil(match_idx, -1);
-}
-
 // writes c to the write pointer in the input buffer
 // otherwise the write pointer is advanced
 boolean ESP8266_AT_Client::writeToInputBuffer(uint8_t c){
@@ -2149,6 +1977,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
   // pursuitString = 5 is the pursuit of 'OK'
   // pursuitString = 6 is the pursuit of 'ERROR'
   // pursuitString = 7 is the pursuit of 'FAIL' (i.e. SEND FAIL)
+  // pursuitString = 8 is the pursuit of 'ready'
   boolean ret = false;
   char c = (char) chr;
 
@@ -2186,6 +2015,10 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       // Serial.print("*F");    
       pursuitString = 7; lastCharAccepted = c;
       break;            
+    case 'r': // PURSUIT of ready
+      // Serial.print("*r");    
+      pursuitString = 8; lastCharAccepted = c;
+      break;
     }
     // intentionally leaving out default case here so we don't 
     // needlessly execute code on every byte received
@@ -2436,6 +2269,33 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       pursuitString = 0; lastCharAccepted = ' ';
       break; 
     }    
+  case 8: // ready
+    switch(lastCharAccepted){
+    case 'r':
+      if(c == 'e') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;    
+    case 'e':
+      if(c == 'a') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break; 
+    case 'a':
+      if(c == 'd') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;            
+    case 'd':
+      if(c == 'y') { 
+        // Serial.print('!');
+        // this is a goal state
+        ok_flag = true;
+      }
+      // unconditionally clear the state machine after 'y'
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    default:
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    }        
   default:
     pursuitString = 0; lastCharAccepted = ' ';
     break;

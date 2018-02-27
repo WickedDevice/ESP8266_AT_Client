@@ -146,17 +146,6 @@ private:
   uint8_t readFromInputBuffer(void);
   void parseScanResult(ap_scan_result_t * result, char * line);
 
-  boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx);
-  boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
-  boolean readStreamUntil(uint8_t * match_idx, int32_t timeout_ms);
-  boolean readStreamUntil(uint8_t * match_idx);
-
-  boolean readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx);
-  boolean readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
-  boolean readStreamUntil(char * target_match, int32_t timeout_ms, boolean reset_timeout_on_possible_rx);
-  boolean readStreamUntil(char * target_match, int32_t timeout_ms);
-  boolean readStreamUntil(char * target_match);
-
   void flushInput();
   void ESP8266_DEBUG(char * msg);
   void ESP8266_DEBUG(char * msg, uint16_t value);
