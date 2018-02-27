@@ -109,6 +109,9 @@ private:
   boolean socket_connected;
   boolean wifi_is_connected;
   boolean listener_started;
+  boolean ok_flag;
+  boolean error_flag;
+
   esp8266_connect_proto_t socket_type;
   uint16_t tcp_keep_alive_interval_seconds;
 

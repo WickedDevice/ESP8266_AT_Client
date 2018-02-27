@@ -5,12 +5,12 @@
 // #define ESP8266_AT_CLIENT_ENABLE_DEBUG
 // #define ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
 // #define ESP8266_AT_CLIENT_DEBUG_OUTGOING
-// #define ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES
-// #define ESP8266_AT_CLIENT_DEBUG_INCOMING
+#define ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES
+#define ESP8266_AT_CLIENT_DEBUG_INCOMING
 
 static uint16_t ESP8266_AT_Client::bytesAvailableMax = 0;
 #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)
-#define DEBUG_WINDOW_SIZE (50)
+#define DEBUG_WINDOW_SIZE (32)
 
 static uint8_t debug_read_window_data[DEBUG_WINDOW_SIZE] = {};
 uint8_t* ESP8266_AT_Client::debug_read_window = debug_read_window_data;
@@ -46,6 +46,20 @@ static void ESP8266_AT_Client::printDebugWindow() {
     count++;
   }
 
+  delay(1000);
+  Serial.println("\n::UNREAD HISTORY::");
+  while(Serial1.available()){
+    uint8_t b = Serial1.read() & 0xff;
+    if(isprint(b) || isspace(b)){
+      Serial.print((char) b);
+    }
+    else{
+      Serial.print(" 0x");
+      if(b < 0x10) Serial.print('0');
+      Serial.print(b, HEX);
+    }
+  }
+
   Serial.println("\n::WRITE HISTORY::");
   idx = debug_write_window_index;
   count = 0;
@@ -69,7 +83,13 @@ static void ESP8266_AT_Client::printDebugWindow() {
   }
 
   Serial.println("\n::END HISTORY::");
-  for(;;); // die
+  for(;;){
+    // service the watchdog
+    digitalWrite(14, LOW);
+    delay(3);    
+    digitalWrite(14, HIGH);      
+    delay(500);
+  } // die
 }
 
 static void ESP8266_AT_Client::addToDebugReadWindow(uint8_t b){
@@ -97,6 +117,8 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin){
   this->streamAsPrint = (Print *) this->stream;
   this->socket_connected = false;
   this->wifi_is_connected = false;
+  this->ok_flag = false;
+  this->error_flag = false;
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
@@ -116,6 +138,8 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
   this->streamAsPrint = (Print *) this->stream;
   this->socket_connected = false;
   this->wifi_is_connected = false;
+  this->ok_flag = false;
+  this->error_flag = false;  
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
@@ -135,6 +159,8 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_
   this->streamAsPrint = (Print *) this->stream;
   this->socket_connected = false;
   this->wifi_is_connected = false;
+  this->ok_flag = false;
+  this->error_flag = false;  
   this->listener_started = false;
   this->input_buffer = buf;
   this->input_buffer_length = buf_length;
@@ -277,13 +303,14 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
   addStringToTargetMatchList("OK");
   addStringToTargetMatchList("ERROR");
   addStringToTargetMatchList("ALREADY CONNECT");
+  addStringToTargetMatchList("CONNECT");
   uint8_t match_index = 0xFF;
   if(readStreamUntil(&match_index)){
      if(match_index == 0){ // got "OK"
        ESP8266_DEBUG("Connected");
        ret = 1; // success
      }
-     else if(match_index == 2){
+     else if((match_index == 2) || (match_index == 3)){
        ESP8266_DEBUG("Already Connected");
        ret = 1; // success
      }
@@ -531,14 +558,16 @@ size_t ESP8266_AT_Client::write(uint8_t c){
  */
 size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   size_t ret = 0;
+  boolean wroteData = false;
+  boolean timeout_flag = false;
+
+  const int32_t interval = 1000;
+  uint32_t current_millis = millis();
+  uint32_t previous_millis = current_millis;
 
   // expect to get ">"
   // then send the bytes
   // then expect to get SEND OK
-
-  clearTargetMatchArray();
-  addStringToTargetMatchList(">");
-  addStringToTargetMatchList("SEND OK");
 
   waitForIncomingDataToComplete();
   streamWrite("AT+CIPSEND=");
@@ -549,25 +578,33 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   streamWrite((uint32_t) sz);
   streamWrite("\r\n");
 
-  boolean timeout = false;
-  boolean complete = false;
-  uint8_t match_index = 0xFF;
-  while(!timeout && !complete){
-    readStreamUntil(&match_index, 500);
-    switch(match_index){
-    case 0:
-      ret = streamWrite(buf, sz); // pass it along
-      break;
-    case 1: 
-      complete = true;
-      break;
-    default: //timeout
-      timeout = true;            
-      break;
+  while(!error_flag && !ok_flag && !timeout_flag){ // TODO: add timeout, else this _could_ be an infinite loop
+    current_millis = millis();
+
+    int16_t b = streamReadChar();
+    if(b > 0){
+      previous_millis = current_millis;      
     }
-    match_index = 0xFF;
+
+    if(!wroteData && (b == '>')){ // this is the trigger to write bytes to the output stream
+      ret = streamWrite(buf, sz); // pass it along
+      wroteData = true;
+    }
+
+    if (current_millis - previous_millis >= interval) {
+      timeout_flag = true;
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
+      Serial.println("PANIC16");
+      printDebugWindow();
+#endif
+    }
+  }
+  
+  if(!ok_flag){
+    ret = 0;
   }
 
+  // should return the number of bytes written
   return ret;
 }
 
@@ -635,6 +672,7 @@ int ESP8266_AT_Client::peek(){
 /** Flush response buffer
  */
 void ESP8266_AT_Client::flush(){
+  Serial.println("FLUSHED");
   stream->flush();
 }
 
@@ -1190,13 +1228,10 @@ boolean ESP8266_AT_Client::addStringToTargetMatchList(char * str){
 // pass in an array of strings to match against
 // the list is presumed to be terminated by a NULL string
 // this function can only handle up to ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES matching targets
-// TODO: this function should get another argument to reset its internal state
-//       because the caller decides it failed irrecoverably for some reason it might never recover?
 boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx){
   boolean match_found = false;
-  static boolean initial_call = true;
-  static uint16_t local_target_buffer_index = 0;
-  static uint8_t match_char_idx[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES] = {0};
+  uint16_t local_target_buffer_index = 0;
+  uint8_t match_char_idx[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES] = {0};
   unsigned long previousMillis = millis();
   boolean first_match_character_received = false;
 
@@ -1213,11 +1248,6 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
     ESP8266_DEBUG("===");
   }
 #endif
-
-  if(initial_call){
-    initial_call = false;
-    //debugStream->println("\nbegin>");
-  }
 
   while(!match_found){ // until a match is found
     unsigned long currentMillis = millis();
@@ -1295,8 +1325,6 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
           // reset the stateful variables
           memset(match_char_idx, 0, ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES);
           local_target_buffer_index = 0;
-          initial_call = true;
-          //debugStream->println("<end");
           break;
         }
       }
@@ -1917,9 +1945,10 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
 #endif    
     
     while((bytesAvailable > 0) && !gotColon){
+      current_time = millis();          
       bytesAvailable--;
       previous_time = current_time;
-      unsigned char b = stream->read() & 0xff;
+      unsigned char b = stream->read() & 0xff;    
       addToDebugReadWindow(b);
 #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)      
       if(debugEnabled){
@@ -2117,24 +2146,46 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
   // pursuitString = 2 is the pursuit of 'CLOSED'
   // pursuitString = 3 is the pursuit of 'UNLINK'
   // pursuitString = 4 is the pursuit of 'WIFI DISCONNECT'
+  // pursuitString = 5 is the pursuit of 'OK'
+  // pursuitString = 6 is the pursuit of 'ERROR'
+  // pursuitString = 7 is the pursuit of 'FAIL' (i.e. SEND FAIL)
   boolean ret = false;
   char c = (char) chr;
 
   switch(pursuitString){
   case 0: // not yet in pursuit
+    ok_flag = false;
+    error_flag = false;  
+    
     switch(c){
     case '+': // +IPD,
+      // Serial.print("*+");
       pursuitString = 1; lastCharAccepted = c;
       break;
     case 'C': // CLOSED,
+      // Serial.print("*C");
       pursuitString = 2; lastCharAccepted = c;
       break;
     case 'U': // UNLINK
+      // Serial.print("*U");
       pursuitString = 3; pursuitDepth = 1; lastCharAccepted = c;
       break;   
     case 'W': // WIFI DISCONNECT
+      // Serial.print("*W");
       pursuitString = 4; pursuitDepth = 1; lastCharAccepted = c;
       break;
+    case 'O': // PURSUIT of OK
+      Serial.print("*O");    
+      pursuitString = 5; lastCharAccepted = c;
+      break;
+    case 'E': // PURSUIT of ERROR
+      // Serial.print("*E");
+      pursuitString = 6; pursuitDepth = 1; lastCharAccepted = c;
+      break;
+    case 'F': // PURSUIT of FAIL
+      // Serial.print("*F");    
+      pursuitString = 7; lastCharAccepted = c;
+      break;            
     }
     // intentionally leaving out default case here so we don't 
     // needlessly execute code on every byte received
@@ -2154,7 +2205,10 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       else { pursuitString = 0; lastCharAccepted = ' '; }
       break;
     case 'D':
-      if(c == ',') ret = true; // this is the only way it can be true
+      if(c == ',') {        
+        // Serial.print('!');
+        ret = true; // this is the only way it can be true
+      }
       // unconditionally clear the state machine after ','
       pursuitString = 0; lastCharAccepted = ' ';
       break;
@@ -2163,7 +2217,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;
     }
     break;
-  case 2: // CLOSED,
+  case 2: // CLOSED
     switch(lastCharAccepted){
     case 'C':
       if(c == 'L') { lastCharAccepted = c; }
@@ -2183,6 +2237,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;      
     case 'E':
       if(c == 'D'){
+        // Serial.print('!');
         // handle seeing CLOSED
         socket_connected = false;
         // Serial.println("socket closed because saw CLOSED");
@@ -2195,7 +2250,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;
     }
     break;    
-  case 3: // UNLINK,
+  case 3: // UNLINK
     switch(lastCharAccepted){
     case 'U':
       if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
@@ -2211,6 +2266,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       }
       else if(pursuitDepth == 5){ // after the second N in UNLINK
         if(c == 'K'){
+          // Serial.print('!');
           // handle seeing UNLINK
           socket_connected = false;
           // Serial.println("socket closed because saw UNLINK");
@@ -2280,6 +2336,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       }
       else if(pursuitDepth == 0xe){ // after the second C in 'WIFI DISCONNECT'
         if(c == 'T') { 
+          // Serial.print('!');
           // this is a goal state
           wifi_is_connected = false;
           socket_connected = false; // that too
@@ -2314,6 +2371,71 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;
     }
     break;
+  case 5: // OK
+    if((lastCharAccepted == 'O') && (c == 'K')){
+      Serial.print('!');
+      // this is a goal state      
+      ok_flag = true;
+    }
+
+    // unconditionally clear the state machine after 'K'
+    pursuitString = 0; lastCharAccepted = ' ';
+    break;    
+  case 6: // ERROR
+    switch(lastCharAccepted){
+    case 'E':
+      if(c == 'R') { lastCharAccepted = c;  pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'R':                  //                         v
+      if(pursuitDepth == 0x2){ // after the first R in 'ERROR'
+                               //                       01234                               
+        if(c == 'R') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }                             //                          v
+      else if(pursuitDepth == 0x3){ // after the first R in 'ERROR'
+                                    //                       01234                               
+        if(c == 'O') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+    case 'O':
+      if(c == 'R') { 
+        // Serial.print('!');
+        // this is a goal state     
+        error_flag = true;
+      }
+      // unconditionally clear the state machine after second 'R'
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;      
+    default:
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    }           
+    break;
+  case 7: // FAIL
+    switch(lastCharAccepted){
+    case 'F':
+      if(c == 'A') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;    
+    case 'A':
+      if(c == 'I') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;      
+    case 'I':
+      if(c == 'L') { 
+        // Serial.print('!');
+        // this is a goal state     
+        error_flag = true;
+      }
+      // unconditionally clear the state machine after 'L'
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;            
+    default: 
+      pursuitString = 0; lastCharAccepted = ' ';
+      break; 
+    }    
   default:
     pursuitString = 0; lastCharAccepted = ' ';
     break;
