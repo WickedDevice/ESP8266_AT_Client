@@ -2494,7 +2494,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;
     case 'D':
       if(c == ',') {        
-        // Serial.print('!');
+        Serial.print('!');
         ret = true; // this is the only way it can be true
       }
       // unconditionally clear the state machine after ','
