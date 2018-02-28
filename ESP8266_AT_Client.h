@@ -97,6 +97,8 @@ public:
   boolean getVersion(uint32_t * version);
   boolean restoreDefault();
 
+  boolean AT(void);
+
   operator bool();
 
   boolean addStringToTargetMatchList(char * str);
@@ -119,9 +121,9 @@ private:
   uint8_t enable_pin;
   uint8_t * input_buffer;
   uint16_t input_buffer_length;
-  uint8_t * input_buffer_read_ptr;
-  uint8_t * input_buffer_write_ptr;
-  uint8_t * input_buffer_tail_ptr;
+  uint16_t input_buffer_read_idx;
+  uint16_t input_buffer_write_idx;
+
   uint16_t num_consumed_bytes_in_input_buffer;
   uint16_t num_free_bytes_in_input_buffer;
   
@@ -140,7 +142,7 @@ private:
   size_t streamWrite(const uint8_t *buf, size_t sz); // write a buffer of known size to the stream
   
   boolean writeToInputBuffer(uint8_t c);
-  uint8_t readFromInputBuffer(void);
+  int16_t readFromInputBuffer(void);
   void parseScanResult(ap_scan_result_t * result, char * line);
 
   void flushInput();

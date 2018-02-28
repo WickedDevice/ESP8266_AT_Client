@@ -123,9 +123,8 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin){
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
-  this->input_buffer_read_ptr = NULL;
-  this->input_buffer_write_ptr = NULL;
-  this->input_buffer_tail_ptr = NULL;
+  this->input_buffer_read_idx = 0;
+  this->input_buffer_write_idx = 0;
   this->enable_pin = enable_pin;
   this->num_consumed_bytes_in_input_buffer = 0;
   this->num_free_bytes_in_input_buffer = 0;
@@ -145,9 +144,8 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
-  this->input_buffer_read_ptr = NULL;
-  this->input_buffer_write_ptr = NULL;
-  this->input_buffer_tail_ptr = NULL;
+  this->input_buffer_read_idx = 0;
+  this->input_buffer_write_idx = 0;
   this->enable_pin = enable_pin;
   this->num_consumed_bytes_in_input_buffer = 0;
   this->num_free_bytes_in_input_buffer = 0;
@@ -167,9 +165,8 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_
   this->listener_started = false;
   this->input_buffer = buf;
   this->input_buffer_length = buf_length;
-  this->input_buffer_read_ptr = buf;
-  this->input_buffer_write_ptr = buf;
-  this->input_buffer_tail_ptr = &(buf[buf_length-1]);
+  this->input_buffer_read_idx = 0;
+  this->input_buffer_write_idx = 0;
   this->enable_pin = enable_pin;
   this->num_consumed_bytes_in_input_buffer = 0;
   this->num_free_bytes_in_input_buffer = 0;
@@ -187,9 +184,8 @@ boolean ESP8266_AT_Client::reset(void){
   // Serial.println(this->streamAsPrint->availableForWrite());  
 
   // reset the buffer state pointers
-  input_buffer_read_ptr = input_buffer;
-  input_buffer_write_ptr = input_buffer;
-  input_buffer_tail_ptr = &(input_buffer[input_buffer_length-1]);
+  input_buffer_read_idx = 0;
+  input_buffer_write_idx = 0;  
   num_consumed_bytes_in_input_buffer = 0;
   num_free_bytes_in_input_buffer = input_buffer_length;
   numIncomingBytesPending = 0;
@@ -250,9 +246,8 @@ void ESP8266_AT_Client::setInputBuffer(uint8_t * buf, uint16_t buf_length){
   input_buffer_length = buf_length;
   num_consumed_bytes_in_input_buffer = 0;
   num_free_bytes_in_input_buffer = buf_length;
-  input_buffer_read_ptr = buf;
-  input_buffer_write_ptr = buf;
-  input_buffer_tail_ptr = &(buf[buf_length-1]);
+  input_buffer_read_idx = 0;
+  input_buffer_write_idx = 0;
 }
 
 int ESP8266_AT_Client::connect(IPAddress ip){
@@ -810,10 +805,10 @@ int ESP8266_AT_Client::read(uint8_t *buf, size_t size){
 }
 
 /** Read a character from response buffer but does not move the pointer.
-	@returns *input_buffer_read_ptr
+	@returns input_buffer[input_buffer_read_idx];
  */
 int ESP8266_AT_Client::peek(){
-  return *input_buffer_read_ptr;
+  return input_buffer[input_buffer_read_idx];
 }
 
 /** Flush response buffer
@@ -1545,19 +1540,15 @@ ESP8266_AT_Client::operator bool(){
 // otherwise the write pointer is advanced
 boolean ESP8266_AT_Client::writeToInputBuffer(uint8_t c){
   if(num_free_bytes_in_input_buffer > 0){
-    *input_buffer_write_ptr = c; // write the value to the buffer
-    // update the write pointer to the next location to write to within the buffer
-    if(input_buffer_write_ptr == input_buffer_tail_ptr){
-      input_buffer_write_ptr = input_buffer;
-    }
-    else{
-      input_buffer_write_ptr++;
+    input_buffer[input_buffer_write_idx++] = c; // write the value to the buffer
+    
+    // handle wrap around
+    if(input_buffer_write_idx >= input_buffer_length){
+      input_buffer_write_idx = 0;
     }
 
     num_consumed_bytes_in_input_buffer++;
     num_free_bytes_in_input_buffer--;
-
-    //debugStream->write(c);
 
     return true;
   }
@@ -1571,26 +1562,22 @@ boolean ESP8266_AT_Client::writeToInputBuffer(uint8_t c){
 // there are no bytes available to read
 // the read pointer is not advanced
 // otherwise the read pointer is advanced
-uint8_t ESP8266_AT_Client::readFromInputBuffer(void){
-  if(num_consumed_bytes_in_input_buffer > 0){
-    uint8_t ret = *input_buffer_read_ptr;
+int16_t ESP8266_AT_Client::readFromInputBuffer(void){
+  if(num_consumed_bytes_in_input_buffer > 0){    
+    uint8_t ret = input_buffer[input_buffer_read_idx++];
 
-    if(input_buffer_read_ptr == input_buffer_tail_ptr){
-      input_buffer_read_ptr = input_buffer;
-    }
-    else{
-      input_buffer_read_ptr++;
+    // handle wrap around
+    if(input_buffer_read_idx >= input_buffer_length){
+      input_buffer_read_idx = 0;
     }
 
     num_consumed_bytes_in_input_buffer--;
     num_free_bytes_in_input_buffer++;
 
-    //debugStream->write(ret);
-
-    return ret;
+    return ret; // returns the value extracted from the input buffer
   }
 
-  return -1;
+  return ((int16_t) -1); // returns -1 if you try and read and there is nothing available
 }
 
 void ESP8266_AT_Client::flushInput(){
@@ -2128,6 +2115,42 @@ boolean ESP8266_AT_Client::restoreDefault(){
   }
 }
 
+boolean ESP8266_AT_Client::AT(void){
+  waitForIncomingDataToComplete();
+  flushInput();
+
+  ok_flag = false;
+  error_flag = false;  
+  streamWrite("AT");
+  streamWrite("\r\n");  
+
+  
+  const int32_t interval = 100;
+  uint32_t current_millis = millis();
+  uint32_t previous_millis = current_millis;
+  boolean timeout_flag = false;
+  while(!error_flag && !ok_flag && !timeout_flag){
+    current_millis = millis();
+
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
+
+    if (current_millis - previous_millis >= interval) {
+      timeout_flag = true;
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
+      Serial.println("PANIC36");
+      printDebugWindow();
+#endif
+    }  
+  }
+
+  return ok_flag;  
+}
+
 size_t ESP8266_AT_Client::streamWrite(const char * str){
 #if defined(ESP8266_AT_CLIENT_DEBUG_OUTGOING)
   Serial.print("SEND S: ");
@@ -2197,7 +2220,7 @@ size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){
 int16_t ESP8266_AT_Client::streamReadChar(void){
   if(numIncomingBytesPending > 0){
     processIncomingAfterColon();
-    return -1; // ask the caller to try again    
+    return ((int16_t) -1); // ask the caller to try again    
   }
   else {
     if(stream->available()){
@@ -2217,8 +2240,8 @@ int16_t ESP8266_AT_Client::streamReadChar(void){
       if(updatePlusIpdState(b)){
         processIncomingUpToColon(); 
         processIncomingAfterColon(); // try immediately, but don't block
-        return -1; // -1 is distinguishable from consumable data to the caller
-                  // because return type is artificially int16_t (not uint16_t)
+        return ((int16_t) -1);       // -1 is distinguishable from consumable data to the caller
+                                     // because return type is artificially int16_t (not uint16_t)
       }
       else{
         return b;
@@ -2229,7 +2252,7 @@ int16_t ESP8266_AT_Client::streamReadChar(void){
         Serial.println("PANIC35");
         printDebugWindow();
 #endif            
-      return -1; // don't ask the stream
+      return ((int16_t) -1); // don't ask the stream
     }
   }
 }
@@ -2559,7 +2582,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;
     case 'D':
       if(c == ',') {        
-        Serial.print('!');
+        // Serial.print('!');
         ret = true; // this is the only way it can be true
       }
       // unconditionally clear the state machine after ','
