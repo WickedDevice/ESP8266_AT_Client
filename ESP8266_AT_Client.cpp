@@ -295,6 +295,8 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
   waitForIncomingDataToComplete();
   flushInput();
   
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CIPSTART=\"");
   if(proto == ESP8266_TCP){
     streamWrite("TCP");
@@ -375,6 +377,9 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
   if(strlen(mac_str) == 17){ // e.g. 00:04:4a:23:11:7b
     waitForIncomingDataToComplete();    
     flushInput();
+
+    ok_flag = false;
+    error_flag = false;
     streamWrite("AT+CIPSTAMAC_CUR=\"");
     streamWrite(mac_str);
     streamWrite("\"\r\n");
@@ -415,6 +420,9 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
 
   // setup tcp server
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CIPMUX=1");
   streamWrite("\r\n");
 
@@ -446,6 +454,9 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
     ret = false;
 
     waitForIncomingDataToComplete();
+
+    ok_flag = false;
+    error_flag = false;    
     streamWrite("AT+CIPSERVER=1,");
     streamWrite((uint32_t) port);
     streamWrite("\r\n");
@@ -482,6 +493,9 @@ boolean ESP8266_AT_Client::configureSoftAP(const char *ssid, const char *pwd, ui
 
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CWSAP_CUR=\"");
   streamWrite(ssid);
   streamWrite("\",\"");
@@ -522,6 +536,9 @@ boolean ESP8266_AT_Client::configureSoftAP(const char *ssid, const char *pwd, ui
 boolean ESP8266_AT_Client::sleep(uint8_t mode){
 
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+SLEEP=");
   streamWrite((uint32_t) mode);
   streamWrite("\r\n");
@@ -564,6 +581,9 @@ boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMa
   IpUint32ToString(dnsServer, (char *) dnsServer_str);
 
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CIPSTA_CUR=\"");
   streamWrite((char *) ip_str);
   streamWrite("\",\"");
@@ -601,6 +621,9 @@ boolean ESP8266_AT_Client::setDHCP(void){
   boolean ret = false;
 
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CWDHCP_CUR=1,1\r\n");
 
   const int32_t interval = 2000;
@@ -655,6 +678,9 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   // then expect to get SEND OK
 
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CIPSEND=");
   if(listener_started){
     // TODO: this assumes the link id is zero, and so only supports one connection
@@ -771,6 +797,9 @@ void ESP8266_AT_Client::stop(){
 
     waitForIncomingDataToComplete();
     flushInput();
+
+    ok_flag = false;
+    error_flag = false;
     streamWrite("AT+CIPCLOSE");
     if(listener_started){
       streamWrite("=0"); //TODO: assumes target is link id 0
@@ -823,6 +852,9 @@ boolean ESP8266_AT_Client::scanForAccessPoint(char * ssid, ap_scan_result_t * re
   int8_t max_rssi = -128;
 
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CWLAP");
   streamWrite("\r\n");
 
@@ -909,6 +941,9 @@ boolean ESP8266_AT_Client::scanAccessPoints(ap_scan_result_t * results, uint8_t 
   int8_t max_rssi = -128;
 
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CWLAP");
   streamWrite("\r\n");
 
@@ -1037,6 +1072,9 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
   uint8_t remote_ip_str_idx = 0;
 
   waitForIncomingDataToComplete();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CIPSTATUS");
   streamWrite("\r\n");
 
@@ -1061,6 +1099,7 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
         }
       }
       else if(num_quotes == 4){
+        num_quotes++;
         ret = stringToIpUint32((char *) remote_ip_str, ip);
       }
       
@@ -1090,6 +1129,9 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
     // then you get "OK"
     waitForIncomingDataToComplete();
     flushInput();
+
+    ok_flag = false;
+    error_flag = false;
     streamWrite("AT+CIPSTATUS");
     streamWrite("\r\n");
 
@@ -1138,27 +1180,39 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str, char * gateway_str, char 
   char * write_ptr = 0;
   char write_idx = 0;
   char num_quotes = 0;
+  boolean wrote_ipstr = false;
+  boolean wrote_gateway_str = false;
+  boolean wrote_netmask_str = false;
+  boolean ok_to_exit = false;
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;
   streamWrite("AT+CIPSTA?");
   streamWrite("\r\n");
 
-  const int32_t interval = 100;
+  const int32_t interval = 1000;
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
   boolean timeout_flag = false;
-  while(!error_flag && !ok_flag && !timeout_flag){
-    current_millis = millis();
+  while(!error_flag && !ok_to_exit && !timeout_flag){
 
+    current_millis = millis();
+    
     int16_t b = streamReadChar();
     if(b > 0){
-      previous_millis = current_millis;      
+      previous_millis = current_millis; 
+
       if(b == '"'){
         num_quotes++;
         switch(num_quotes){
-        case 1: write_ptr = ip_str; break;
-        case 3: write_ptr = gateway_str; break;
-        case 5: write_ptr = netmask_str; break;
+        case 1: write_ptr = ip_str; write_idx = 0; break;
+        case 2: wrote_ipstr = true; break;
+        case 3: write_ptr = gateway_str;  write_idx = 0; break;
+        case 4: wrote_gateway_str = true; break;
+        case 5: write_ptr = netmask_str;  write_idx = 0; break;
+        case 6: wrote_netmask_str = true; break;
         default: write_ptr = NULL; write_idx = 0;
         }                  
       }
@@ -1178,10 +1232,13 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str, char * gateway_str, char 
       Serial.println("PANIC30");
       printDebugWindow();
 #endif
-    }  
+    }
+    else{
+      ok_to_exit = ok_flag && wrote_ipstr && wrote_gateway_str && wrote_netmask_str;      
+    }
   }  
 
-  return ok_flag;
+  return ok_to_exit;
 }
 
 uint32_t ESP8266_AT_Client::IpArrayToIpUint32(uint8_t * ip){
@@ -1321,6 +1378,9 @@ boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
 
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CIFSR");
   streamWrite("\r\n");
 
@@ -1382,7 +1442,11 @@ boolean ESP8266_AT_Client::getHostByName(const char *hostname, uint32_t *ip, uin
 
   socket_type = ESP8266_UDP;
 
-  waitForIncomingDataToComplete();
+  waitForIncomingDataToComplete();  
+  flushInput();
+  
+  ok_flag = false;
+  error_flag = false;
   streamWrite("AT+CIPSTART=\"UDP\",\"");
   streamWrite(hostname);
   streamWrite("\",7\r\n");
@@ -1515,6 +1579,9 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
 
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;
   streamWrite("AT+CWMODE_CUR=");
   streamWrite((uint32_t) mode);
   streamWrite("\r\n");
@@ -1554,6 +1621,9 @@ boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t tim
 
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;
   streamWrite("AT+CWJAP");
   if(!permanent){
     streamWrite("_CUR");
@@ -1609,6 +1679,9 @@ boolean ESP8266_AT_Client::disconnectFromNetwork(){
 
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CWQAP");
   streamWrite("\r\n");
 
@@ -1732,6 +1805,9 @@ boolean ESP8266_AT_Client::firmwareUpdateBegin(){
 
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+CIUPDATE");
   streamWrite("\r\n");
   
@@ -1856,7 +1932,8 @@ boolean ESP8266_AT_Client::getVersion(char * version){
   uint8_t write_idx = 0;
   boolean got_colon = false;
   boolean got_paren = false;
-  
+  boolean extracted_version = false;
+  boolean ok_to_exit = false;
   // normal response looks like this
   // AT version:0.50.0.0(Sep 18 2015 20:55:38)
   // SDK version:1.4.0
@@ -1865,6 +1942,9 @@ boolean ESP8266_AT_Client::getVersion(char * version){
   
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;
   streamWrite("AT+GMR");
   streamWrite("\r\n");
 
@@ -1873,7 +1953,7 @@ boolean ESP8266_AT_Client::getVersion(char * version){
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
   boolean timeout_flag = false;
-  while(!error_flag && !ok_flag && !timeout_flag){
+  while(!error_flag && !ok_to_exit && !timeout_flag){
     current_millis = millis();
 
     int16_t b = streamReadChar();
@@ -1884,6 +1964,7 @@ boolean ESP8266_AT_Client::getVersion(char * version){
       }
       else if(b == '('){
         got_paren = true;
+        extracted_version = true;
       }
 
       if((b != ':') && got_colon && !got_paren){
@@ -1900,10 +1981,13 @@ boolean ESP8266_AT_Client::getVersion(char * version){
       Serial.println("PANIC33");
       printDebugWindow();
 #endif
-    }  
+    }
+    else {
+      ok_to_exit = ok_flag && extracted_version;
+    }
   }  
 
-  return ok_flag;
+  return ok_to_exit;
 }
 
 boolean ESP8266_AT_Client::getVersion(uint32_t * version){
@@ -1953,6 +2037,9 @@ boolean ESP8266_AT_Client::restoreDefault(){
 
   waitForIncomingDataToComplete();
   flushInput();
+
+  ok_flag = false;
+  error_flag = false;  
   streamWrite("AT+RESTORE");
   streamWrite("\r\n");
   
@@ -2576,43 +2663,68 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break;
     }
     break;
-  case 5: // OK
-    if((lastCharAccepted == 'O') && (c == 'K')){
-      // Serial.print('!');
-      // this is a goal state      
-      ok_flag = true;
-    }
+  case 5: // OK\r\n
+    switch(lastCharAccepted){
+    case 'O':
+      if(c == 'K'){ lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;
+    case 'K':
+      if(c == '\r'){ lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;      
+    case '\r':
+      if(c == '\n'){
+        // Serial.print('!');
+        // this is a goal state      
+        ok_flag = true;        
+      }
 
-    // unconditionally clear the state machine after 'K'
-    pursuitString = 0;
-    break;    
-  case 6: // ERROR
+      // unconditionally clear the state machine after 'K'
+      pursuitString = 0;    
+      break;
+    default: 
+      pursuitString = 0;       
+      break;
+    }
+    break;
+  case 6: // ERROR\r\n
     switch(lastCharAccepted){
     case 'E':
       if(c == 'R') { lastCharAccepted = c;  pursuitDepth++; }
       else { pursuitString = 0; }
       break;
     case 'R':                  //                         v
-      if(pursuitDepth == 0x2){ // after the first R in 'ERROR'
-                               //                       01234                               
+      if(pursuitDepth == 0x2){ // after the first R in 'ERROR\r\n'
+                               //                       01234 5 6
         if(c == 'R') { lastCharAccepted = c; pursuitDepth++; }
         else { pursuitString = 0; }
       }                             //                          v
-      else if(pursuitDepth == 0x3){ // after the first R in 'ERROR'
-                                    //                       01234                               
+      else if(pursuitDepth == 0x3){ // after the first R in 'ERROR\r\n'
+                                    //                       01234 5 6                               
         if(c == 'O') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; }
+      }                             //                             v
+      else if(pursuitDepth == 0x5){ // after the first R in 'ERROR\r\n'
+                                    //                       01234 5 6                               
+        if(c == '\r') { lastCharAccepted = c; pursuitDepth++; }
         else { pursuitString = 0; }
       }
       else { pursuitString = 0; }
     case 'O':
-      if(c == 'R') { 
+      if(c == 'R') { lastCharAccepted = c;  pursuitDepth++; }
+      else { pursuitString = 0; }
+      break;
+    case '\r':
+      if(c == '\n'){
         // Serial.print('!');
         // this is a goal state     
         error_flag = true;
       }
+
       // unconditionally clear the state machine after second 'R'
-      pursuitString = 0;
-      break;      
+      pursuitString = 0;    
+      break;         
     default:
       pursuitString = 0;
       break;
@@ -2642,7 +2754,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break; 
     }   
     break; 
-  case 8: // ready    
+  case 8: // ready\r\n
     switch(lastCharAccepted){
     case 'r':
       if(c == 'e') { lastCharAccepted = c; }
@@ -2657,14 +2769,23 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       else { pursuitString = 0; }
       break;            
     case 'd':
-      if(c == 'y') { 
+      if(c == 'y') { lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;
+    case 'y':
+      if(c == '\r') { lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;      
+    case '\r':
+      if(c == '\n'){
         // Serial.print('!');
         // this is a goal state
-        ready_flag = true;
+        ready_flag = true;    
       }
+
       // unconditionally clear the state machine after 'y'
-      pursuitString = 0;
-      break;
+      pursuitString = 0;    
+      break;      
     default:
       pursuitString = 0;
       break;
