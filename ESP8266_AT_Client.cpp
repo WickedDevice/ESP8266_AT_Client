@@ -666,8 +666,11 @@ size_t ESP8266_AT_Client::write(uint8_t c){
  */
 size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   size_t ret = 0;
-  boolean wroteData = false;
   boolean timeout_flag = false;
+  boolean ok_to_exit = false;
+  boolean got_ok = false;
+  boolean got_sendok = false;  
+  boolean wroteData = false;
 
   const int32_t interval = 1000;
   uint32_t current_millis = millis();
@@ -689,7 +692,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   streamWrite((uint32_t) sz);
   streamWrite("\r\n");
 
-  while(!error_flag && !ok_flag && !timeout_flag){ // TODO: add timeout, else this _could_ be an infinite loop
+  while(!error_flag && !ok_to_exit && !timeout_flag){ // TODO: add timeout, else this _could_ be an infinite loop
     current_millis = millis();
 
     int16_t b = streamReadChar();
@@ -702,6 +705,16 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
       wroteData = true;
     }
 
+    if(ok_flag){
+      if(!got_ok){
+        got_ok = true;
+      }
+      else if(!got_sendok){
+        got_sendok = true;
+      }
+      ok_flag = false;
+    }
+
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
 #if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
@@ -709,9 +722,12 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
       printDebugWindow();
 #endif
     }
+    else{
+      ok_to_exit = got_ok && got_sendok && wroteData;
+    }
   }
   
-  if(!ok_flag){
+  if(!ok_to_exit){
     ret = 0;
   }
 
