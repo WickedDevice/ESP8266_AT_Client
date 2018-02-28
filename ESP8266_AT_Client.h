@@ -110,6 +110,7 @@ private:
   boolean wifi_is_connected;
   boolean listener_started;
   boolean ok_flag;
+  boolean ready_flag;
   boolean error_flag;
 
   esp8266_connect_proto_t socket_type;
@@ -123,9 +124,6 @@ private:
   uint8_t * input_buffer_tail_ptr;
   uint16_t num_consumed_bytes_in_input_buffer;
   uint16_t num_free_bytes_in_input_buffer;
-
-  char target_match_array[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1];
-  char target_match_lengths[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1];
   
   void processIncomingUpToColon(void);   // should be called anytime right after you see +IPD,
   boolean processIncomingAfterColon(void);  // should be called frequently (as in non-blocking implementation), while incoming data is pending
@@ -141,7 +139,6 @@ private:
   size_t streamWrite(int32_t value);
   size_t streamWrite(const uint8_t *buf, size_t sz); // write a buffer of known size to the stream
   
-  void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
   uint8_t readFromInputBuffer(void);
   void parseScanResult(ap_scan_result_t * result, char * line);
