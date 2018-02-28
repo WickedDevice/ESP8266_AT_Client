@@ -217,10 +217,12 @@ boolean ESP8266_AT_Client::reset(void){
   while(!error_flag && !ready_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }       
+    }   
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -322,9 +324,11 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }
     }
 
     if (current_millis - previous_millis >= interval) {
@@ -391,9 +395,11 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
     while(!error_flag && !ok_flag && !timeout_flag){
       current_millis = millis();
 
-      int16_t b = streamReadChar();
-      if(b > 0){
-        previous_millis = current_millis;      
+      if(stream->available() > 0){
+        int16_t b = streamReadChar();
+        if(b > 0){
+          previous_millis = current_millis;      
+        }
       }
 
       if (current_millis - previous_millis >= interval) {
@@ -433,10 +439,12 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -467,10 +475,12 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
     while(!error_flag && !ok_flag && !timeout_flag){
       current_millis = millis();
 
-      int16_t b = streamReadChar();
-      if(b > 0){
-        previous_millis = current_millis;      
-      }          
+      if(stream->available() > 0){
+        int16_t b = streamReadChar();
+        if(b > 0){
+          previous_millis = current_millis;      
+        }          
+      }
 
       if (current_millis - previous_millis >= interval) {
         timeout_flag = true;
@@ -513,10 +523,12 @@ boolean ESP8266_AT_Client::configureSoftAP(const char *ssid, const char *pwd, ui
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -550,10 +562,12 @@ boolean ESP8266_AT_Client::sleep(uint8_t mode){
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -599,10 +613,12 @@ boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMa
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -633,10 +649,12 @@ boolean ESP8266_AT_Client::setDHCP(void){
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -695,14 +713,16 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   while(!error_flag && !ok_to_exit && !timeout_flag){ // TODO: add timeout, else this _could_ be an infinite loop
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }
 
-    if(!wroteData && (b == '>')){ // this is the trigger to write bytes to the output stream
-      ret = streamWrite(buf, sz); // pass it along
-      wroteData = true;
+      if(got_ok && !wroteData && (b == '>')){ // this is the trigger to write bytes to the output stream
+        ret = streamWrite(buf, sz); // pass it along
+        wroteData = true;
+      }      
     }
 
     if(ok_flag){
@@ -829,10 +849,12 @@ void ESP8266_AT_Client::stop(){
     while(!error_flag && !ok_flag && !timeout_flag){
       current_millis = millis();
 
-      int16_t b = streamReadChar();
-      if(b > 0){
-        previous_millis = current_millis;      
-      }          
+      if(stream->available() > 0){
+        int16_t b = streamReadChar();
+        if(b > 0){
+          previous_millis = current_millis;      
+        } 
+      }         
 
       if (current_millis - previous_millis >= interval) {
         timeout_flag = true;
@@ -892,49 +914,51 @@ boolean ESP8266_AT_Client::scanForAccessPoint(char * ssid, ap_scan_result_t * re
   while(!timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;
-      if(!inside_result){
-        if(b == '('){
-          inside_quotes = false;
-          inside_result = true;
-          line_idx = 0;
-          line[0] = 0;      
-        }
-        else if(ok_flag || error_flag){ // you got OK or ERROR and you're not in a scan result
-          break;                        // either we got the result or we didn't, but in any case we're done
-        }
-      }
-      else if(inside_result){
-        if(!inside_quotes && (b == ')')){
-          inside_result = false;
-          // process the line
-          ap_scan_result_t res = {0};
-          parseScanResult(&res, line);
-          result_number++;
-          if((strcmp(&(res.ssid[0]), ssid) == 0) && (res.rssi > max_rssi)){
-            *result = res;
-            max_rssi = res.rssi;
-            ret = true;
-          }  
-        }
-        else {
-          if(b == '"'){
-            inside_quotes = !inside_quotes;
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;
+        if(!inside_result){
+          if(b == '('){
+            inside_quotes = false;
+            inside_result = true;
+            line_idx = 0;
+            line[0] = 0;      
           }
+          else if(ok_flag || error_flag){ // you got OK or ERROR and you're not in a scan result
+            break;                        // either we got the result or we didn't, but in any case we're done
+          }
+        }
+        else if(inside_result){
+          if(!inside_quotes && (b == ')')){
+            inside_result = false;
+            // process the line
+            ap_scan_result_t res = {0};
+            parseScanResult(&res, line);
+            result_number++;
+            if((strcmp(&(res.ssid[0]), ssid) == 0) && (res.rssi > max_rssi)){
+              *result = res;
+              max_rssi = res.rssi;
+              ret = true;
+            }  
+          }
+          else {
+            if(b == '"'){
+              inside_quotes = !inside_quotes;
+            }
 
-          // if there is still space in the buffer enqueue b
-          if(line_idx < 127){ // line[127] must always be zero, and we're about to write two consecutive locations
-            line[line_idx++] = b;  // add a character, advance the write index
-            line[line_idx] = '\0'; // and enforce a null terminator
+            // if there is still space in the buffer enqueue b
+            if(line_idx < 127){ // line[127] must always be zero, and we're about to write two consecutive locations
+              line[line_idx++] = b;  // add a character, advance the write index
+              line[line_idx] = '\0'; // and enforce a null terminator
+            }
           }
         }
-      }
-      // otherwise you can ignore the character
-      // because you are not inside results
-      // and you have not just seen a '('
-    }          
+        // otherwise you can ignore the character
+        // because you are not inside results
+        // and you have not just seen a '('
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -981,47 +1005,49 @@ boolean ESP8266_AT_Client::scanAccessPoints(ap_scan_result_t * results, uint8_t 
   while(!timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;
-      if(!inside_result){
-        if(b == '('){
-          inside_quotes = false;
-          inside_result = true;
-          line_idx = 0;
-          line[0] = 0;      
-        }
-        else if(ok_flag || error_flag){ // you got OK or ERROR and you're not in a scan result
-                                        // either we got the result or we didn't, but in any case we're done
-          ret = ok_flag;                // if we got 'OK' then the result is good
-          break;
-        }
-      }
-      else if(inside_result){
-        if(!inside_quotes && (b == ')')){
-          inside_result = false;
-          if(result_number < max_num_results){
-            // process the line, but only if there's space for the result          
-            parseScanResult(&(results[result_number]), line);            
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;
+        if(!inside_result){
+          if(b == '('){
+            inside_quotes = false;
+            inside_result = true;
+            line_idx = 0;
+            line[0] = 0;      
           }
-          result_number++;
-        }
-        else {
-          if(b == '"'){
-            inside_quotes = !inside_quotes;
+          else if(ok_flag || error_flag){ // you got OK or ERROR and you're not in a scan result
+                                          // either we got the result or we didn't, but in any case we're done
+            ret = ok_flag;                // if we got 'OK' then the result is good
+            break;
           }
+        }
+        else if(inside_result){
+          if(!inside_quotes && (b == ')')){
+            inside_result = false;
+            if(result_number < max_num_results){
+              // process the line, but only if there's space for the result          
+              parseScanResult(&(results[result_number]), line);            
+            }
+            result_number++;
+          }
+          else {
+            if(b == '"'){
+              inside_quotes = !inside_quotes;
+            }
 
-          // if there is still space in the buffer enqueue b
-          if(line_idx < 127){ // line[127] must always be zero, and we're about to write two consecutive locations
-            line[line_idx++] = b;  // add a character, advance the write index
-            line[line_idx] = '\0'; // and enforce a null terminator
+            // if there is still space in the buffer enqueue b
+            if(line_idx < 127){ // line[127] must always be zero, and we're about to write two consecutive locations
+              line[line_idx++] = b;  // add a character, advance the write index
+              line[line_idx] = '\0'; // and enforce a null terminator
+            }
           }
         }
-      }
-      // otherwise you can ignore the character
-      // because you are not inside results
-      // and you have not just seen a '('
-    }          
+        // otherwise you can ignore the character
+        // because you are not inside results
+        // and you have not just seen a '('
+      }      
+    }    
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1101,25 +1127,27 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-      if(b == '"'){
-        num_quotes++;
-      }
-      
-      if((num_quotes == 3) && (b != '"')){ // don't buffer the leading '"'
-        if(remote_ip_str_idx < 15){
-          remote_ip_str[remote_ip_str_idx++] = b;
-          remote_ip_str[remote_ip_str_idx] = '\0';
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+        if(b == '"'){
+          num_quotes++;
         }
-      }
-      else if(num_quotes == 4){
-        num_quotes++;
-        ret = stringToIpUint32((char *) remote_ip_str, ip);
-      }
-      
-    }    
+        
+        if((num_quotes == 3) && (b != '"')){ // don't buffer the leading '"'
+          if(remote_ip_str_idx < 15){
+            remote_ip_str[remote_ip_str_idx++] = b;
+            remote_ip_str[remote_ip_str_idx] = '\0';
+          }
+        }
+        else if(num_quotes == 4){
+          num_quotes++;
+          ret = stringToIpUint32((char *) remote_ip_str, ip);
+        }
+        
+      }    
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1158,13 +1186,15 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
     while(!error_flag && !ok_flag && !timeout_flag){
       current_millis = millis();
 
-      int16_t b = streamReadChar();
-      if(b > 0){
-        previous_millis = current_millis;      
-        if(b == '4'){ // STATUS:4 means disconnected
-          socket_connected = false;
-          ret = 0;
-        }      
+      if(stream->available() > 0){
+        int16_t b = streamReadChar();
+        if(b > 0){
+          previous_millis = current_millis;      
+          if(b == '4'){ // STATUS:4 means disconnected
+            socket_connected = false;
+            ret = 0;
+          }      
+        }
       }
 
       if (current_millis - previous_millis >= interval) {
@@ -1216,31 +1246,33 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str, char * gateway_str, char 
 
     current_millis = millis();
     
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis; 
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis; 
 
-      if(b == '"'){
-        num_quotes++;
-        switch(num_quotes){
-        case 1: write_ptr = ip_str; write_idx = 0; break;
-        case 2: wrote_ipstr = true; break;
-        case 3: write_ptr = gateway_str;  write_idx = 0; break;
-        case 4: wrote_gateway_str = true; break;
-        case 5: write_ptr = netmask_str;  write_idx = 0; break;
-        case 6: wrote_netmask_str = true; break;
-        default: write_ptr = NULL; write_idx = 0;
-        }                  
-      }
-      else if(write_ptr != NULL){ // write pointer was set and b is != '"'     
-        // IP addresses can't be longer than "255.255.255.255" (15 characters)
-        // so write_idx should never obtain a value > 15
-        if(write_idx < 15){
-          write_ptr[write_idx++] = b;  // NOTE: this is _still_ dangerous if the passed pointers don't have enough space
-          write_ptr[write_idx] = '\0'; //enforce NULL terminate
+        if(b == '"'){
+          num_quotes++;
+          switch(num_quotes){
+          case 1: write_ptr = ip_str; write_idx = 0; break;
+          case 2: wrote_ipstr = true; break;
+          case 3: write_ptr = gateway_str;  write_idx = 0; break;
+          case 4: wrote_gateway_str = true; break;
+          case 5: write_ptr = netmask_str;  write_idx = 0; break;
+          case 6: wrote_netmask_str = true; break;
+          default: write_ptr = NULL; write_idx = 0;
+          }                  
         }
-      }
-    }        
+        else if(write_ptr != NULL){ // write pointer was set and b is != '"'     
+          // IP addresses can't be longer than "255.255.255.255" (15 characters)
+          // so write_idx should never obtain a value > 15
+          if(write_idx < 15){
+            write_ptr[write_idx++] = b;  // NOTE: this is _still_ dangerous if the passed pointers don't have enough space
+            write_ptr[write_idx] = '\0'; //enforce NULL terminate
+          }
+        }
+      }  
+    }      
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1408,25 +1440,27 @@ boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;
-      if(b == ','){
-        num_commas++;
-      }
-      else if(b == '"'){
-        num_quotes++;
-      }
-
-      if(num_commas == 4){ // station MAC is the last one reported (i.e. after the 4th comma)
-        if((b != '"') && (num_quotes == 7)){ // betweeb 7th and 8th quotes
-          // worst case mac address is FF:FF:FF:FF:FF:FF (17 characters)
-          if(write_idx < 17){ // [16] is the last viable write location
-            mac_str[write_idx++] = b;
-            mac_str[write_idx] = '\0';
-          }
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;
+        if(b == ','){
+          num_commas++;
         }
-      }         
+        else if(b == '"'){
+          num_quotes++;
+        }
+
+        if(num_commas == 4){ // station MAC is the last one reported (i.e. after the 4th comma)
+          if((b != '"') && (num_quotes == 7)){ // betweeb 7th and 8th quotes
+            // worst case mac address is FF:FF:FF:FF:FF:FF (17 characters)
+            if(write_idx < 17){ // [16] is the last viable write location
+              mac_str[write_idx++] = b;
+              mac_str[write_idx] = '\0';
+            }
+          }
+        }         
+      }
     }
 
     if (current_millis - previous_millis >= interval) {
@@ -1474,10 +1508,12 @@ boolean ESP8266_AT_Client::getHostByName(const char *hostname, uint32_t *ip, uin
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
   
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1575,10 +1611,7 @@ void ESP8266_AT_Client::flushInput(){
 
   if(bytesAvailable > 0){  
     while(stream->available() > 0){    
-      int chr = streamReadChar();
-      if(chr == -1){
-        continue;
-      }
+      int16_t chr = streamReadChar();
 
   #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
       if(debugStream != NULL && debugEnabled) debugStream->println((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor
@@ -1609,10 +1642,12 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1660,21 +1695,23 @@ boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t tim
   while(!error_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-      if(wifi_is_connected){
-        got_connected = true;
-      }
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+        if(wifi_is_connected){
+          got_connected = true;
+        }
 
-      if(ok_flag){
-        got_ok = true;
-      }
+        if(ok_flag){
+          got_ok = true;
+        }
 
-      if(wifi_is_connected && got_ok){
-        break;
-      }
-    }          
+        if(wifi_is_connected && got_ok){
+          break;
+        }
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1708,21 +1745,23 @@ boolean ESP8266_AT_Client::disconnectFromNetwork(){
   while(!error_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis; 
-      if(!wifi_is_connected){
-        got_disonnected = true;
-      }
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis; 
+        if(!wifi_is_connected){
+          got_disonnected = true;
+        }
 
-      if(ok_flag){
-        got_ok = true;
-      }
+        if(ok_flag){
+          got_ok = true;
+        }
 
-      if(got_disonnected && got_ok){
-        break;
-      }
-    }          
+        if(got_disonnected && got_ok){
+          break;
+        }
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1834,58 +1873,60 @@ boolean ESP8266_AT_Client::firmwareUpdateBegin(){
   while(!error_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;     
-      // mini-state machine looking for +CIPUPDATE:1 
-      //                                0123456789ab
-      switch(last_character_received){
-      case ' ': 
-        if(b == '+'){ last_character_received = b; pursuit_depth = 1; }   
-        break;     
-      case '+':
-        if(b == 'C'){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;
-      case 'C':
-        if(b == 'I'){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;    
-      case 'I':
-        if(b == 'P'){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;    
-      case 'P':
-        if((b == 'U') && (pursuit_depth == 4)){ last_character_received = b; pursuit_depth ++; }        
-        else if((b == 'D') && (pursuit_depth == 6)){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;     
-      case 'D':
-        if(b == 'A'){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;    
-      case 'A':
-        if(b == 'T'){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;    
-      case 'T':
-        if(b == 'E'){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;    
-      case 'E':
-        if(b == ':'){ last_character_received = b; pursuit_depth ++; }        
-        else { last_character_received = ' '; }
-        break;    
-      case ':':
-        if(b == '1'){ 
-          got_plus_cipupdate_colon_1 = true;
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;     
+        // mini-state machine looking for +CIPUPDATE:1 
+        //                                0123456789ab
+        switch(last_character_received){
+        case ' ': 
+          if(b == '+'){ last_character_received = b; pursuit_depth = 1; }   
+          break;     
+        case '+':
+          if(b == 'C'){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
           break;
-        }        
-        last_character_received = ' '; // unconditional, goal state
-        break;                                                      
-      // no default state, on purpose
-      }
-    }          
+        case 'C':
+          if(b == 'I'){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
+          break;    
+        case 'I':
+          if(b == 'P'){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
+          break;    
+        case 'P':
+          if((b == 'U') && (pursuit_depth == 4)){ last_character_received = b; pursuit_depth ++; }        
+          else if((b == 'D') && (pursuit_depth == 6)){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
+          break;     
+        case 'D':
+          if(b == 'A'){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
+          break;    
+        case 'A':
+          if(b == 'T'){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
+          break;    
+        case 'T':
+          if(b == 'E'){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
+          break;    
+        case 'E':
+          if(b == ':'){ last_character_received = b; pursuit_depth ++; }        
+          else { last_character_received = ' '; }
+          break;    
+        case ':':
+          if(b == '1'){ 
+            got_plus_cipupdate_colon_1 = true;
+            break;
+          }        
+          last_character_received = ' '; // unconditional, goal state
+          break;                                                      
+        // no default state, on purpose
+        }
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1913,10 +1954,12 @@ boolean ESP8266_AT_Client::firmwareUpdateStatus(uint8_t * status){
   while(!error_flag && !ok_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -1972,24 +2015,26 @@ boolean ESP8266_AT_Client::getVersion(char * version){
   while(!error_flag && !ok_to_exit && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;   
-      if(b == ':'){
-        got_colon = true;
-      }
-      else if(b == '('){
-        got_paren = true;
-        extracted_version = true;
-      }
-
-      if((b != ':') && got_colon && !got_paren){
-        if(write_idx < 15){ // [15] is the last available space
-          version[write_idx++] = b;
-          version[write_idx] = '\0';
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;   
+        if(b == ':'){
+          got_colon = true;
         }
-      }
-    }          
+        else if(b == '('){
+          got_paren = true;
+          extracted_version = true;
+        }
+
+        if((b != ':') && got_colon && !got_paren){
+          if(write_idx < 15){ // [15] is the last available space
+            version[write_idx++] = b;
+            version[write_idx] = '\0';
+          }
+        }
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -2066,10 +2111,12 @@ boolean ESP8266_AT_Client::restoreDefault(){
   while(!error_flag && !ready_flag && !timeout_flag){
     current_millis = millis();
 
-    int16_t b = streamReadChar();
-    if(b > 0){
-      previous_millis = current_millis;      
-    }          
+    if(stream->available() > 0){
+      int16_t b = streamReadChar();
+      if(b > 0){
+        previous_millis = current_millis;      
+      }          
+    }
 
     if (current_millis - previous_millis >= interval) {
       timeout_flag = true;
@@ -2150,35 +2197,40 @@ size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){
 int16_t ESP8266_AT_Client::streamReadChar(void){
   if(numIncomingBytesPending > 0){
     processIncomingAfterColon();
-    return -1;
+    return -1; // ask the caller to try again    
   }
   else {
-    if(stream->available() == 0){
-      return -1;
-    }
-
-    int16_t b = stream->read() & 0xff;
-    addToDebugReadWindow(b);
-#if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)
-    if(debugEnabled){
-      if(isprint(b) || isspace(b)) Serial.print((char) b);
-      else{
-        Serial.print(" 0x");
-        if(b < 0x10) Serial.print('0');
-        Serial.println(b, HEX);
+    if(stream->available()){
+      int16_t b = stream->read() & 0xff;
+      addToDebugReadWindow(b);
+  #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)
+      if(debugEnabled){
+        if(isprint(b) || isspace(b)) Serial.print((char) b);
+        else{
+          Serial.print(" 0x");
+          if(b < 0x10) Serial.print('0');
+          Serial.println(b, HEX);
+        }
       }
-    }
-#endif
+  #endif
 
-    if(updatePlusIpdState(b)){
-      processIncomingUpToColon(); 
-      processIncomingAfterColon(); // try immediately, but don't block
-      return -1; // -1 is distinguishable from consumable data to the caller
-                // because return type is artificially int16_t (not uint16_t)
+      if(updatePlusIpdState(b)){
+        processIncomingUpToColon(); 
+        processIncomingAfterColon(); // try immediately, but don't block
+        return -1; // -1 is distinguishable from consumable data to the caller
+                  // because return type is artificially int16_t (not uint16_t)
+      }
+      else{
+        return b;
+      }    
     }
-    else{
-      return b;
-    }    
+    else {
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)                   
+        Serial.println("PANIC35");
+        printDebugWindow();
+#endif            
+      return -1; // don't ask the stream
+    }
   }
 }
 
@@ -2192,7 +2244,7 @@ int16_t ESP8266_AT_Client::streamReadChar(void){
 // that number tells you how many bytes will be received
 // then you get a colon delimeter
 // then you should get exactly that many bytes reported
-void ESP8266_AT_Client::processIncomingUpToColon(void){
+void ESP8266_AT_Client::processIncomingUpToColon(void){  
   // timeout after 500ms of inactivity
   uint32_t current_time = millis();    
   uint32_t previous_time = current_time;
@@ -2227,7 +2279,7 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
       current_time = millis();          
       bytesAvailable--;
       previous_time = current_time;
-      unsigned char b = stream->read() & 0xff;    
+      int16_t b = stream->read() & 0xff;    
       addToDebugReadWindow(b);
 #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)      
       if(debugEnabled){
@@ -2276,32 +2328,37 @@ void ESP8266_AT_Client::processIncomingUpToColon(void){
 
   // if we got to here, we've received a colon and _should_ be able to parse
   // the contents of num_bytes_str into a number which we can store in num_bytes_expected
-  // lets give it a shot    
-  char * temp;
-  numIncomingBytesPending = strtoul(&num_bytes_str[0], &temp, 10);
-  if (*temp != '\0'){
-    // TODO: complain loudly if this happens
-#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)               
-    Serial.println("PANIC3");
-    Serial.print("num_bytes_str was \"");
-    Serial.print(num_bytes_str);
-    Serial.println("\"");
-    for(uint16_t ii = 0; ii < strlen(num_bytes_str); ii++){
-      uint8_t b = num_bytes_str[ii];
-      if(isprint(b) || isspace(b)){
-        Serial.print((char) b);
-      }
-      else{
-        Serial.print(" 0x");
-        if(b < 0x10) Serial.print('0');
-        Serial.print(b, HEX);
-      }
-    }
-    printDebugWindow();
-#endif    
-    numIncomingBytesPending = 0;
-    return; // failed to parse length
-  }
+  // lets give it a shot   
+  numIncomingBytesPending = atoi(num_bytes_str);
+
+  // Serial.print(numIncomingBytesPending);
+  // Serial.println(" Bytes Incoming");
+  
+//   char * temp;
+//   numIncomingBytesPending = strtoul(num_bytes_str, &temp, 10);
+//   if (*temp != '\0'){
+//     // TODO: complain loudly if this happens
+// #if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)               
+//     Serial.println("PANIC3");
+//     Serial.print("num_bytes_str was \"");
+//     Serial.print(num_bytes_str);
+//     Serial.println("\"");
+//     for(uint16_t ii = 0; ii < strlen(num_bytes_str); ii++){
+//       uint8_t b = num_bytes_str[ii];
+//       if(isprint(b) || isspace(b)){
+//         Serial.print((char) b);
+//       }
+//       else{
+//         Serial.print(" 0x");
+//         if(b < 0x10) Serial.print('0');
+//         Serial.print(b, HEX);
+//       }
+//     }
+//     printDebugWindow();
+// #endif    
+//     numIncomingBytesPending = 0;
+//     return; // failed to parse length
+//   }
 }
 
 // this function should be the only other one besides streamReadChar that
@@ -2328,11 +2385,14 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
     }
 #endif    
 
-    while(bytesAvailable > 0){
-      bytesAvailable--;
-
-      uint8_t b = stream->read() & 0xff;
+    while(bytesAvailable > 0){      
+  
+      int16_t b = stream->read() & 0xff;
       addToDebugReadWindow(b);
+
+      bytesAvailable--;
+      numIncomingBytesPending--;
+      ret = true; // true we read some bytes from stream
 
 #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)      
       if(debugEnabled){        
@@ -2345,18 +2405,14 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
       }
 #endif
 
-      if(writeToInputBuffer(b)){
-        ret = true;
-        numIncomingBytesPending--;
-      }
-      else {
+      if(!writeToInputBuffer(b)){
         // TODO: complain _really_ loudly if this happens      
 #if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)              
         Serial.println("PANIC4");
         printDebugWindow();
         numIncomingBytesPending = 0; // the transfer has failed
 #endif        
-        return false; // out of space in application buffer                
+        break; // out of space in application buffer                
       }
 
       if(numIncomingBytesPending == 0){
@@ -2366,8 +2422,14 @@ boolean ESP8266_AT_Client::processIncomingAfterColon(void){
       }
     }
   }
-
-  return ret;
+  // else {
+  //   // there are no bytes pending
+  //   // ret will be false
+  // }
+  
+  return ret; 
+  // ret is true if an only if 
+  //   at least one byte was put into the application data input buffer
 }
 
 // this should get called _before_ any AT communication to the ESP8266
@@ -2377,14 +2439,17 @@ void ESP8266_AT_Client::waitForIncomingDataToComplete(void){
   uint32_t current_time = millis();    
   uint32_t previous_time = current_time;
   const int32_t timeout_interval = 500;  // signed for comparison / overflow  
-  boolean dataWasIncoming = numIncomingBytesPending > 0;
+
+  boolean dataWasIncoming = (numIncomingBytesPending > 0);
   while(numIncomingBytesPending > 0){
     current_time = millis();
+
     boolean gotData = processIncomingAfterColon(); // decrements numIncomingBytesPending
     if(gotData){
       previous_time = current_time;
     }
-    else if (current_time - previous_time >= timeout_interval){
+    
+    if (current_time - previous_time >= timeout_interval){
       // TODO: complain _really_ loudly if this happens
 #if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)            
       Serial.println("PANIC5");

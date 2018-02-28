@@ -127,7 +127,7 @@ private:
   
   void processIncomingUpToColon(void);   // should be called anytime right after you see +IPD,
   boolean processIncomingAfterColon(void);  // should be called frequently (as in non-blocking implementation), while incoming data is pending
-  uint32_t numIncomingBytesPending = 0;  // this should be counted down to zero by processIncomingAfterColon  
+  int32_t numIncomingBytesPending = 0;  // this should be counted down to zero by processIncomingAfterColon  
   boolean updatePlusIpdState(uint8_t c); // anytime a character is received this should be called with that caracter as an argument 
                                          // returns true if handleIncoming should be called
   int16_t streamReadChar(void);          // should only be called if it is known that there are bytes available
