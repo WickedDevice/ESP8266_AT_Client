@@ -5,8 +5,8 @@
 // #define ESP8266_AT_CLIENT_ENABLE_DEBUG
 // #define ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
 // #define ESP8266_AT_CLIENT_DEBUG_OUTGOING
-#define ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES
-#define ESP8266_AT_CLIENT_DEBUG_INCOMING
+// #define ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES
+// #define ESP8266_AT_CLIENT_DEBUG_INCOMING
 
 static uint16_t ESP8266_AT_Client::bytesAvailableMax = 0;
 #if defined(ESP8266_AT_CLIENT_DEBUG_INCOMING)
@@ -688,8 +688,9 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   boolean got_ok = false;
   boolean got_sendok = false;  
   boolean wroteData = false;
+  boolean gotArrow = false;
 
-  const int32_t interval = 5000;
+  const int32_t interval = 100;
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
 
@@ -702,7 +703,8 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
 
   ok_flag = false;
   send_ok_flag = false;
-  error_flag = false;  
+  error_flag = false;    
+
   streamWrite("AT+CIPSEND=");
   if(listener_started){
     // TODO: this assumes the link id is zero, and so only supports one connection
@@ -718,9 +720,12 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
       int16_t b = streamReadChar();
       if(b > 0){
         previous_millis = current_millis;      
+        if(b == '>'){
+          gotArrow = true;            
+        }
       }
 
-      if(got_ok && !wroteData && (b == '>')){ // this is the trigger to write bytes to the output stream
+      if(got_ok && !wroteData && gotArrow){ // this is the trigger to write bytes to the output stream
         ret = streamWrite(buf, sz); // pass it along
         wroteData = true;
         // Serial.println("WROTE DATA");
@@ -748,8 +753,12 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
     }
   }
   
-  if(!ok_to_exit){
-    ret = 0;
+  // don't leave the ESP hanging waiting for data
+  if((ret < sz) && timeout_flag){
+    ret = streamWrite(buf + ret, sz - ret); 
+    // so if ret = 0 it does streamWrite(buf, sz);
+    // if ret = sz - 1 it does streamWrite(&buf[sz-1], 1);
+    // and everything in between
   }
 
   // Serial.print("RET=");
