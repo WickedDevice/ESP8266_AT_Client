@@ -753,6 +753,12 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
     }
   }
   
+  // NOTE: this next bit is 'magic bullet'
+  //       sometimes sending doesn't pick up the expected event sequence
+  //       so... if you go through all that and timeout without writing
+  //       just go ahead and write anyway and hope for the best
+  //       and this actually seems to work reliably
+
   // don't leave the ESP hanging waiting for data
   if((ret < sz) && timeout_flag){
     ret = streamWrite(buf + ret, sz - ret); 
