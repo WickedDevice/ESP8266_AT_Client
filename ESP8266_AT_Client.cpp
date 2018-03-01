@@ -771,6 +771,12 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   // Serial.println(ret);
   // Serial.println();
 
+  // datasheet actually says: 
+  // Enter transparent transmission, with a 20-ms
+  // interval between each packet, and a maximum of
+  // 2048 bytes per packet.
+  delay(25); // minimum 20ms, lets be generous
+
   // should return the number of bytes written
   return ret;
 }
@@ -2234,9 +2240,10 @@ size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){
       bytes_written++;
       buf++;
 
-      if((bytes_written % 32) == 0){
-        delay(10); // maybe don't flood the ESP8266 with bytes?
-      }
+      // NOTE: removing the following in favor of a 20ms delay _after_ CIPSEND completes
+      // if((bytes_written % 32) == 0){
+      //   delay(10); // maybe don't flood the ESP8266 with bytes?
+      // }
     }    
   }  
 
