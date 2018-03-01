@@ -120,6 +120,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin){
   this->ok_flag = false;
   this->error_flag = false;
   this->ready_flag = false;
+  this->send_ok_flag = false;
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
@@ -141,6 +142,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
   this->ok_flag = false;
   this->error_flag = false;  
   this->ready_flag = false;
+  this->send_ok_flag = false;
   this->listener_started = false;
   this->input_buffer = NULL;
   this->input_buffer_length = 0;
@@ -162,6 +164,7 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_
   this->ok_flag = false;
   this->error_flag = false;
   this->ready_flag = false;
+  this->send_ok_flag = false;
   this->listener_started = false;
   this->input_buffer = buf;
   this->input_buffer_length = buf_length;
@@ -196,6 +199,7 @@ boolean ESP8266_AT_Client::reset(void){
   ok_flag = false;
   error_flag = false;
   ready_flag = false;  
+  send_ok_flag = false;
 
   pinMode(enable_pin, OUTPUT);
   digitalWrite(enable_pin, LOW);
@@ -685,7 +689,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   boolean got_sendok = false;  
   boolean wroteData = false;
 
-  const int32_t interval = 1000;
+  const int32_t interval = 5000;
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
 
@@ -694,8 +698,10 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   // then expect to get SEND OK
 
   waitForIncomingDataToComplete();
+  flushInput();
 
   ok_flag = false;
+  send_ok_flag = false;
   error_flag = false;  
   streamWrite("AT+CIPSEND=");
   if(listener_started){
@@ -705,7 +711,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   streamWrite((uint32_t) sz);
   streamWrite("\r\n");
 
-  while(!error_flag && !ok_to_exit && !timeout_flag){ // TODO: add timeout, else this _could_ be an infinite loop
+  while(!error_flag && !ok_to_exit && !timeout_flag){
     current_millis = millis();
 
     if(stream->available() > 0){
@@ -717,17 +723,17 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
       if(got_ok && !wroteData && (b == '>')){ // this is the trigger to write bytes to the output stream
         ret = streamWrite(buf, sz); // pass it along
         wroteData = true;
+        // Serial.println("WROTE DATA");
       }      
     }
 
-    if(ok_flag){
-      if(!got_ok){
-        got_ok = true;
-      }
-      else if(!got_sendok){
-        got_sendok = true;
-      }
-      ok_flag = false;
+    if(ok_flag){      
+      got_ok = true;      
+      // Serial.println("GOT OK");
+    }
+    else if(send_ok_flag){
+      got_sendok = true;
+      // Serial.println("GOT SEND OK");
     }
 
     if (current_millis - previous_millis >= interval) {
@@ -745,6 +751,10 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   if(!ok_to_exit){
     ret = 0;
   }
+
+  // Serial.print("RET=");
+  // Serial.println(ret);
+  // Serial.println();
 
   // should return the number of bytes written
   return ret;
@@ -2183,7 +2193,7 @@ size_t ESP8266_AT_Client::streamWrite(uint32_t value){
   return streamWrite((uint8_t * ) str, strlen(str));
 }
 
-size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){    
+size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){
   size_t bytes_written = 0;
 
 #if defined(ESP8266_AT_CLIENT_DEBUG_OUTGOING)  
@@ -2210,10 +2220,11 @@ size_t ESP8266_AT_Client::streamWrite(const uint8_t *buf, size_t sz){
       buf++;
 
       if((bytes_written % 32) == 0){
-        delay(1); // maybe don't flood the ESP8266 with bytes?
+        delay(10); // maybe don't flood the ESP8266 with bytes?
       }
     }    
   }  
+
   return bytes_written;
 }
 
@@ -2513,18 +2524,21 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
   // pursuitString = 2 is the pursuit of 'CLOSED'
   // pursuitString = 3 is the pursuit of 'UNLINK'
   // pursuitString = 4 is the pursuit of 'DISCONNECT'
-  // pursuitString = 5 is the pursuit of 'OK'
-  // pursuitString = 6 is the pursuit of 'ERROR'
+  // pursuitString = 5 is the pursuit of 'OK\r\n'
+  // pursuitString = 6 is the pursuit of 'ERROR\r\n'
   // pursuitString = 7 is the pursuit of 'FAIL' (i.e. SEND FAIL)
   // pursuitString = 8 is the pursuit of 'ready'
   // pursuitString = 9 is the pursuit of 'GOT IP'
   // pursuitString = 10 is the pursuit of 'WIFI ' -> transfers to GOT IP or DISCONNECT
+  // pursuitString = 11 is the pursuit of 'SEND' -> transfers to FAIL or OK (no \r\n required)
+  // pursuitString = 12 is the pursuit of 'OK' (no \r\n required)  
   boolean ret = false;
   char c = (char) chr;
 
   switch(pursuitString){
   case 0: // not yet in pursuit
     ok_flag = false;
+    send_ok_flag = false;
     error_flag = false;  
     ready_flag = false;        
     switch(c){
@@ -2549,10 +2563,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       // Serial.print("*E");
       pursuitString = 6; pursuitDepth = 1; lastCharAccepted = c;
       break;
-    case 'F': // PURSUIT of FAIL
-      // Serial.print("*F");    
-      pursuitString = 7; lastCharAccepted = c;
-      break;            
+    // case 'F': 7 = FAIL only reachable through 'SEND '
     case 'r': // PURSUIT of ready
       // Serial.print("*r");    
       pursuitString = 8; lastCharAccepted = c;
@@ -2561,7 +2572,12 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
     case 'W': // WIFI
       // Serial.print("*W");
       pursuitString = 10; pursuitDepth = 1; lastCharAccepted = c;
-      break;      
+      break;
+    case 'S': // 'SEND '
+      // Serial.print("*S");    
+      pursuitString = 11; lastCharAccepted = c;
+      break;       
+    // case 'O': 12 = OK only reachable through 'SEND '
     }
     // intentionally leaving out default case here so we don't 
     // needlessly execute code on every byte received
@@ -2914,7 +2930,8 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       else { pursuitString = 0; }
       break;      
     case 'I':
-      if(c == 'P') {               
+      if(c == 'P') {   
+        // goal state            
         // Serial.print('!');
         wifi_is_connected = true;
       }
@@ -2925,7 +2942,66 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       pursuitString = 0;
       break;
     }
-    break;    
+    break; 
+  case 11: // 'SEND '
+    switch(lastCharAccepted){
+    case 'S':
+      if(c == 'E') { lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;      
+    case 'E':
+      if(c == 'N') { lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;
+    case 'N':
+      if(c == 'D') { lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;      
+    case 'D':
+      if(c == ' ') { lastCharAccepted = c; }
+      else { pursuitString = 0; }
+      break;            
+    case ' ':
+      if(c == 'O'){
+        // transfer to OK pursuit string
+        // Serial.print("*O");
+        pursuitString = 12;
+      }
+      else if(c == 'F'){
+        // transfer to FAIL pursuit string
+        // Serial.print("*F");
+        pursuitString = 7; 
+      }
+      else{      
+        // goal state
+        // unconditionally clear the state machine after ' O' or ' F'
+        pursuitString = 0;                    
+      }
+
+      // applicable to either 'O' or 'F', no-op for others because pursuitString goes back to 0
+      lastCharAccepted = c;  
+      break;   
+    default: 
+      pursuitString = 0;       
+      break;
+    } 
+    break;   
+  case 12: // 'OK' 
+    switch(lastCharAccepted){
+    case 'O':
+      if(c == 'K') { 
+        // goal state            
+        // Serial.print('!'); 
+        send_ok_flag = true;       
+      }
+      // unconditionally clear the state machine after 'K'
+      pursuitString = 0;            
+      break;
+    default: 
+      pursuitString = 0;       
+      break;
+    }
+    break;      
   default:
     pursuitString = 0;
     break;

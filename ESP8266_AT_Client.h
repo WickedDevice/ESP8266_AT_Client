@@ -114,6 +114,7 @@ private:
   boolean ok_flag;
   boolean ready_flag;
   boolean error_flag;
+  boolean send_ok_flag;
 
   esp8266_connect_proto_t socket_type;
   uint16_t tcp_keep_alive_interval_seconds;
