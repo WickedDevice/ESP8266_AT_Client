@@ -841,7 +841,7 @@ int ESP8266_AT_Client::peek(){
 /** Flush response buffer
  */
 void ESP8266_AT_Client::flush(){
-  Serial.println("FLUSHED");
+  // Serial.println("FLUSHED");
   stream->flush();
 }
 
