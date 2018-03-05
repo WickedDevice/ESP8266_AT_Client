@@ -1463,7 +1463,7 @@ boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
     current_millis = millis();
 
     if(stream->available() > 0){
-      int16_t b = streamReadChar();
+      int16_t b = streamReadChar();      
       if(b > 0){
         previous_millis = current_millis;
         if(b == ','){
@@ -1473,8 +1473,8 @@ boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
           num_quotes++;
         }
 
-        if(num_commas == 4){ // station MAC is the last one reported (i.e. after the 4th comma)
-          if((b != '"') && (num_quotes == 7)){ // betweeb 7th and 8th quotes
+        if(num_commas == 2){ // station MAC is the last one reported (i.e. after the 1st comma)
+          if((b != '"') && (num_quotes == 3)){ // betweeb 3rd and 4th quotes
             // worst case mac address is FF:FF:FF:FF:FF:FF (17 characters)
             if(write_idx < 17){ // [16] is the last viable write location
               mac_str[write_idx++] = b;
