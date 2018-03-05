@@ -19,7 +19,6 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin){
   this->debugEnabled = false;
   this->debugStream = NULL;
   this->tcp_keep_alive_interval_seconds = 120;
-  this->receive_state = WAITING_FOR_IPD;
 }
 
 ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
@@ -37,7 +36,6 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream){
   this->debugEnabled = false;
   this->debugStream = NULL;
   this->tcp_keep_alive_interval_seconds = 120;
-  this->receive_state = WAITING_FOR_IPD;
 }
 
 ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_t * buf, uint16_t buf_length){
@@ -55,7 +53,6 @@ ESP8266_AT_Client::ESP8266_AT_Client(uint8_t enable_pin, Stream * stream, uint8_
   this->debugEnabled = false;
   this->debugStream = NULL;
   this->tcp_keep_alive_interval_seconds = 120;
-  this->receive_state = WAITING_FOR_IPD;
 }
 
 void ESP8266_AT_Client::setDebugStream(Stream * ds){
@@ -64,30 +61,30 @@ void ESP8266_AT_Client::setDebugStream(Stream * ds){
 
 boolean ESP8266_AT_Client::reset(void){
    // reset the buffer state pointers
-   input_buffer_read_ptr = input_buffer;
-   input_buffer_write_ptr = input_buffer;
-   input_buffer_tail_ptr = &(input_buffer[input_buffer_length-1]);
-   num_consumed_bytes_in_input_buffer = 0;
-   num_free_bytes_in_input_buffer = input_buffer_length;
+  input_buffer_read_ptr = input_buffer;
+  input_buffer_write_ptr = input_buffer;
+  input_buffer_tail_ptr = &(input_buffer[input_buffer_length-1]);
+  num_consumed_bytes_in_input_buffer = 0;
+  num_free_bytes_in_input_buffer = input_buffer_length;
+  numIncomingBytesPending = 0;
 
-   socket_connected = false;
-   listener_started = false;
-   receive_state = WAITING_FOR_IPD;
+  socket_connected = false;
+  listener_started = false;
 
-   pinMode(enable_pin, OUTPUT);
-   digitalWrite(enable_pin, LOW);
-   delay(50);
-   digitalWrite(enable_pin, HIGH);
+  pinMode(enable_pin, OUTPUT);
+  digitalWrite(enable_pin, LOW);
+  delay(50);
+  digitalWrite(enable_pin, HIGH);
 
-   ESP8266_DEBUG("ESP8266 Hello World.");
+  ESP8266_DEBUG("ESP8266 Hello World.");
 
-   if(readStreamUntil("ready", 10000)){
-     ESP8266_DEBUG("Received 'ready'");
-   }
-   else{
-      ESP8266_DEBUG("Panic");
-      return false;
-   }
+  if(readStreamUntil("ready", 10000)){
+    ESP8266_DEBUG("Received 'ready'");
+  }
+  else{
+    ESP8266_DEBUG("Panic");
+    return false;
+  }
 
   return true;
 }
@@ -144,13 +141,14 @@ int ESP8266_AT_Client::connect(const char *host, uint16_t port, esp8266_connect_
   // only implementing a blocking API - never return 0
   // set up an AT command and send it
   // then return whether or not it succeeded
+
   int ret = 2; // initialize to error
   socket_connected = false;
   listener_started = false;
-  num_characters_remaining_to_receive = 0;
 
   ESP8266_DEBUG("Connecting to ", (char *) host);
 
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+CIPSTART=\"");
   if(proto == ESP8266_TCP){
@@ -224,11 +222,13 @@ boolean ESP8266_AT_Client::connectUDP(const char *host, uint16_t port){
 }
 
 boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
+  
   boolean ret = false;
   char mac_str[18] = {0};
   macArrayToString(mac_address, (char *) mac_str);
 
   if(strlen(mac_str) == 17){ // e.g. 00:04:4a:23:11:7b
+    waitForIncomingDataToComplete();
     flushInput();
     streamPrint("AT+CIPSTAMAC_CUR=\"");
     streamPrint(mac_str);
@@ -251,10 +251,12 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
 }
 
 boolean ESP8266_AT_Client::listen(uint16_t port){
+
   boolean ret = false;
   flushInput();
 
   // setup tcp server
+  waitForIncomingDataToComplete();
   streamPrint("AT+CIPMUX=1");
   streamPrint("\r\n");
 
@@ -273,10 +275,12 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
   }
 
   if(ret){ // so far so good
+
     delay(100);
     flushInput();
     ret = false;
 
+    waitForIncomingDataToComplete();
     streamPrint("AT+CIPSERVER=1,");
     streamPrint(port);
     streamPrint("\r\n");
@@ -302,7 +306,10 @@ boolean ESP8266_AT_Client::listen(uint16_t port){
 }
 
 boolean ESP8266_AT_Client::configureSoftAP(const char *ssid, const char *pwd, uint8_t channel, uint8_t sec){
+
   boolean ret = false;
+  
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+CWSAP_CUR=\"");
   streamPrint(ssid);
@@ -335,7 +342,10 @@ boolean ESP8266_AT_Client::configureSoftAP(const char *ssid, const char *pwd, ui
 // 1 : light-sleep mode
 // 2 : modem-sleep mode
 boolean ESP8266_AT_Client::sleep(uint8_t mode){
+
   boolean ret = false;
+
+  waitForIncomingDataToComplete();
   streamPrint("AT+SLEEP=");
   streamPrint(mode);
   streamPrint("\r\n");
@@ -361,6 +371,7 @@ boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMa
   IpUint32ToString(defaultGateway, (char *) defaultGateway_str);
   IpUint32ToString(dnsServer, (char *) dnsServer_str);
 
+  waitForIncomingDataToComplete();
   streamPrint("AT+CIPSTA_CUR=\"");
   streamPrint((char *) ip_str);
   streamPrint("\",\"");
@@ -378,6 +389,8 @@ boolean ESP8266_AT_Client::setStaticIPAddress(uint32_t ipAddress, uint32_t netMa
 
 boolean ESP8266_AT_Client::setDHCP(void){
   boolean ret = false;
+
+  waitForIncomingDataToComplete();
   streamPrint("AT+CWDHCP_CUR=1,1\r\n");
 
   clearTargetMatchArray();
@@ -408,6 +421,7 @@ size_t ESP8266_AT_Client::write(uint8_t c){
 size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   size_t ret = 0;
 
+  waitForIncomingDataToComplete();
   streamPrint("AT+CIPSEND=");
   if(listener_started){
     // TODO: this assumes the link id is zero, and so only supports one connection
@@ -433,20 +447,12 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
 int ESP8266_AT_Client::available(){
   // an intent to read() is always preceded by a call to available(),
   // if the caller knows what is good for them,
-  // so this is where we need to perform the receive
-  // in a synchronous manner (with timeout)
-
-  // some state management needs to be encapsulated here as we'll only read one
-  // packet in at a time and we'll keep a 1500 byte buffer around to store
-  // the buffered data, hey maybe we can even implement peek correctly
-  int ret = num_consumed_bytes_in_input_buffer;
-
-  if(socket_connected || listener_started){
-    receive(); // doesn't really matter what the response is
-    ret = num_consumed_bytes_in_input_buffer;
+  // so this is where we need to perform asynchronous receipt of +IPD data
+  while(stream->available()){
+    streamReadChar();
   }
 
-  return ret;
+  return num_consumed_bytes_in_input_buffer;
 }
 
 /** Read a character from stream
@@ -495,6 +501,7 @@ void ESP8266_AT_Client::stop(){
     // set up an AT command and send it
     // then return whether or not it succeeded
 
+    waitForIncomingDataToComplete();
     flushInput();
     streamPrint("AT+CIPCLOSE");
     if(listener_started){
@@ -521,9 +528,6 @@ void ESP8266_AT_Client::stop(){
 
   readStreamUntil("OK", 100);
 
-  // reset the +IPD handling state variables
-  receive_state = WAITING_FOR_IPD;
-  num_characters_remaining_to_receive = 0;
   socket_connected = false;
 
   // and drop all the remaining unread user buffer data
@@ -550,6 +554,7 @@ boolean ESP8266_AT_Client::scanForAccessPoint(char * ssid, ap_scan_result_t * re
   addStringToTargetMatchList(")\r\n");
   addStringToTargetMatchList("OK\r\n");
 
+  waitForIncomingDataToComplete();
   streamPrint("AT+CWLAP");
   streamPrint("\r\n");
 
@@ -588,6 +593,7 @@ boolean ESP8266_AT_Client::scanAccessPoints(ap_scan_result_t * results, uint8_t 
   addStringToTargetMatchList(")\r\n");
   addStringToTargetMatchList("OK\r\n");
 
+  waitForIncomingDataToComplete();
   streamPrint("AT+CWLAP");
   streamPrint("\r\n");
 
@@ -667,6 +673,7 @@ boolean ESP8266_AT_Client::getRemoteIp(uint32_t * ip){
   addStringToTargetMatchList("STATUS:4");   // disconnected
   addStringToTargetMatchList("OK\r\n");
 
+  waitForIncomingDataToComplete();
   streamPrint("AT+CIPSTATUS");
   streamPrint("\r\n");
 
@@ -705,54 +712,31 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
     addStringToTargetMatchList("STATUS:3"); // connected
     addStringToTargetMatchList("STATUS:4"); // disconnected
     addStringToTargetMatchList("OK\r\n");
-    addStringToTargetMatchList("+IPD,");
 
     // you have to get "STATUS:" and a numeric code
     // then you have *may* get "+CIPSTATUS:"
     // then you get "OK"
-    if(num_characters_remaining_to_receive > 0){
-      receive(true); // receive is already in progress
-      called_receive = true;
-    }
-    else{
-      streamPrint("AT+CIPSTATUS");
-      streamPrint("\r\n");
+    waitForIncomingDataToComplete();
+    streamPrint("AT+CIPSTATUS");
+    streamPrint("\r\n");
 
-      uint8_t match_index = 0xFF;
-      if(readStreamUntil(&match_index, 100)){
-        switch(match_index){
-        case 2: //disconnected
-          if(socket_type == ESP8266_TCP){
-            socket_connected = false;
-            ret = 0;
-          }
-          break;
-        case 4: // +IPD, gotta deal with it
-          receive(true);
-          called_receive = true;
-          break;
-        case 0:
-        case 1:
-        case 3:
-        default:
-           // nothing to do
-          break;
+    uint8_t match_index = 0xFF;
+    if(readStreamUntil(&match_index, 100)){
+      switch(match_index){
+      case 2: //disconnected
+        if(socket_type == ESP8266_TCP){
+          socket_connected = false;
+          ret = 0;
         }
-      }
-
-      if(!called_receive && match_index != 3){
-        if(readStreamUntil(&match_index, 100)){
-          if(match_index != 3){ //  != "OK"
-             ESP8266_DEBUG("CIPSTATUS not OK");
-             // doesn't necessarily mean we're disconnected
-          }
-        }
-        else{
-          ESP8266_DEBUG("AT+CIPSTATUS expected OK, but didn't receive it");
-        }
+        break;
+      case 0:
+      case 1:
+      case 3:
+      default:
+          // nothing to do
+        break;
       }
     }
-
   }
 
   return ret;
@@ -766,6 +750,7 @@ uint8_t ESP8266_AT_Client::connectedToNetwork(void){
   addStringToTargetMatchList("No AP"); // disconnected
   addStringToTargetMatchList("OK\r\n");
 
+  waitForIncomingDataToComplete();
   streamPrint("AT+CWJAP_CUR?");
   streamPrint("\r\n");
 
@@ -793,6 +778,7 @@ boolean ESP8266_AT_Client::getIPAddress(char * ip_str, char * gateway_str, char 
   addStringToTargetMatchList("\""); // this is tricky, since it's a subset of other match strings, it must come after them
   addStringToTargetMatchList("OK\r\n");
 
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+CIPSTA?");
   streamPrint("\r\n");
@@ -969,6 +955,7 @@ boolean ESP8266_AT_Client::getMacAddress(char * mac_str){
   addStringToTargetMatchList("OK\r\n");
   addStringToTargetMatchList("ERROR\r\n");
 
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+CIFSR");
   streamPrint("\r\n");
@@ -1009,6 +996,7 @@ boolean ESP8266_AT_Client::getHostByName(const char *hostname, uint32_t *ip, uin
 
   socket_type = ESP8266_UDP;
 
+  waitForIncomingDataToComplete();
   streamPrint("AT+CIPSTART=\"UDP\",\"");
   streamPrint(hostname);
   streamPrint("\",7\r\n");
@@ -1118,7 +1106,10 @@ boolean ESP8266_AT_Client::readStreamUntil(uint8_t * match_idx, char * target_bu
         previousMillis = millis(); // reset the timeout on any sequence-matching character received
       }
 
-      char chr = stream->read(); // read a character
+      int chr = streamReadChar(); // read a character
+      if(chr == -1){
+        continue;
+      }
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
       if(debugStream != NULL && debugEnabled) debugStream->print(chr); // echo the received characters to the Serial Monitor
@@ -1282,8 +1273,11 @@ uint8_t ESP8266_AT_Client::readFromInputBuffer(void){
 }
 
 void ESP8266_AT_Client::flushInput(){
-  while(stream->available() > 0){
-    char chr = stream->read();
+  while(stream->available() > 0){    
+    int chr = streamReadChar();
+    if(chr == -1){
+      continue;
+    }
 
 #ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
     if(debugStream != NULL && debugEnabled) debugStream->println((uint8_t) chr, HEX); // echo the received characters to the Serial Monitor
@@ -1297,6 +1291,7 @@ void ESP8266_AT_Client::flushInput(){
 boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
   boolean ret = false;
 
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+CWMODE_CUR=");
   streamPrint(mode);
@@ -1324,8 +1319,9 @@ boolean ESP8266_AT_Client::setNetworkMode(uint8_t mode){
 }
 
 boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t timeout_ms, void (*onConnect)(void), boolean permanent){
+  
+  waitForIncomingDataToComplete();
   flushInput();
-
   streamPrint("AT+CWJAP");
   if(!permanent){
     streamPrint("_CUR");
@@ -1369,6 +1365,7 @@ boolean ESP8266_AT_Client::connectToNetwork(char * ssid, char * pwd, int32_t tim
 boolean ESP8266_AT_Client::disconnectFromNetwork(){
   boolean ret = false;
 
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+CWQAP");
   streamPrint("\r\n");
@@ -1390,136 +1387,6 @@ boolean ESP8266_AT_Client::setTcpKeepAliveInterval(uint16_t _tcp_seconds){
     return true;
   }
   return false;
-}
-
-void ESP8266_AT_Client::receive(boolean delegate_received_IPD){
-  uint8_t match_index = 0xFF;
-
-  if(num_free_bytes_in_input_buffer == 0){
-    // trying to receive more is unproductive until we get rid of some that we alrady have
-    return;
-  }
-
-  if(stream->available() == 0){
-    // there's nothing in the hardware buffer to digest
-    return;
-  }
-
-  if(delegate_received_IPD){
-    if(receive_state == WAITING_FOR_IPD || receive_state == WAITING_FOR_IPD_OR_CLOSED){
-      receive_state = WAITING_FOR_COLON;
-      ESP8266_DEBUG("Rx State = WAITING_FOR_COLON (1)");
-    }
-    else{
-      ESP8266_DEBUG("Unexpected delegate call to receive");
-    }
-  }
-
-  if(receive_state == WAITING_FOR_IPD){
-    clearTargetMatchArray();
-    addStringToTargetMatchList("+IPD,");
-    addStringToTargetMatchList("OK");
-    if(readStreamUntil(&match_index, 10) && (match_index == 0)){
-      // we got +IPD,
-      receive_state = WAITING_FOR_COLON;
-      ESP8266_DEBUG("Rx State = WAITING_FOR_COLON (2)");
-    }
-  }
-  else if(receive_state == WAITING_FOR_IPD_OR_CLOSED){
-    clearTargetMatchArray();
-    addStringToTargetMatchList("+IPD,");
-    addStringToTargetMatchList("CLOSED");
-    addStringToTargetMatchList("UNLINK");
-    addStringToTargetMatchList("OK");
-    if(readStreamUntil(&match_index, 10)){
-      if(match_index == 0){
-        // we got +IPD,
-        receive_state = WAITING_FOR_COLON;
-        ESP8266_DEBUG("Rx State = WAITING_FOR_COLON (3)");
-      }
-      else if((match_index == 1) || (match_index == 2)){
-        // we got CLOSED or UNLINK
-        receive_state = WAITING_FOR_IPD;
-        num_characters_remaining_to_receive = 0;
-        socket_connected = false;
-
-        // and drop all the remaining unread user buffer data
-        while(num_consumed_bytes_in_input_buffer > 0){
-          readFromInputBuffer();
-        }
-
-        ESP8266_DEBUG("Rx State = WAITING_FOR_IPD");
-        return; // we're done here
-      }
-    }
-  }
-
-  if(receive_state == WAITING_FOR_COLON){
-    clearTargetMatchArray();
-    addStringToTargetMatchList(":");
-    char tmp[32] = {0};
-    if(readStreamUntil(&match_index, &(tmp[0]), 32, 10)){
-      if(match_index == 0){
-        char * temp = NULL;
-
-        // if there's a comma in the tmp, we need to skip past it
-        // after tokenizing once, tmp will point to the first number in the string
-        char * token = strtok(tmp, ",");
-        // after tokenizing twice, tmp will still point to the first number in the string
-        // if token is != NULL, tmp should be updated to token, and tokenizing a third time
-        // should result in null or something is really messed up about the response
-        token = strtok(NULL, ",");
-        char * num_characters_expected_str = token == NULL ? tmp : token;
-        uint32_t num_characters_expected = strtoul(num_characters_expected_str, &temp, 10);
-
-        token = strtok(NULL, ",");
-
-        if (*temp != '\0'){
-          ESP8266_DEBUG("Debug: Receive Error, length parse error on ", temp);
-          //TODO: this is a disaster... caller should be able to know about it if it happens
-          receive_state = WAITING_FOR_IPD_OR_CLOSED;
-          ESP8266_DEBUG("Rx State = WAITING_FOR_IPD_OR_CLOSED (1)");
-        }
-        else if(token != NULL){
-          ESP8266_DEBUG("Debug: Receive Error, +IPD string had more than one comma -- ", token);
-          //TODO: this is a disaster... caller should be able to know about it if it happens
-          receive_state = WAITING_FOR_IPD_OR_CLOSED;
-          ESP8266_DEBUG("Rx State = WAITING_FOR_IPD_OR_CLOSED (3)");
-        }
-        else{
-          num_characters_remaining_to_receive = num_characters_expected;
-          receive_state = PROCESSING_IPD;
-          ESP8266_DEBUG("Rx State = PROCESSING_IPD");
-        }
-      }
-    }
-  }
-
-  if(receive_state == PROCESSING_IPD){
-    ESP8266_DEBUG("Remaining: ", num_characters_remaining_to_receive);
-    uint32_t bytes_read_this_cycle = 0;
-    while((num_characters_remaining_to_receive > 0) && (num_free_bytes_in_input_buffer > 0) && stream->available()){
-      uint8_t ch = stream->read();
-
-      bytes_read_this_cycle++;
-#ifdef ESP8266_AT_CLIENT_DEBUG_ECHO_EVERYTHING
-      if(debugStream != NULL && debugEnabled) debugStream->write(ch);
-#endif
-
-      if(writeToInputBuffer(ch)){
-        num_characters_remaining_to_receive--;
-      }
-      else{
-        ESP8266_DEBUG("writeToInputBuffer failed");
-        break;
-      }
-    }
-
-    if(num_characters_remaining_to_receive == 0){
-      receive_state = WAITING_FOR_IPD_OR_CLOSED;
-      ESP8266_DEBUG("Rx State = WAITING_FOR_IPD_OR_CLOSED (2)");
-    }
-  }
 }
 
 void ESP8266_AT_Client::ESP8266_DEBUG(char * msg){
@@ -1696,6 +1563,8 @@ void ESP8266_AT_Client::streamPrintln(void){
 
 boolean ESP8266_AT_Client::firmwareUpdateBegin(){
   boolean ret = false;
+
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+CIUPDATE");
   streamPrint("\r\n");
@@ -1747,6 +1616,7 @@ boolean ESP8266_AT_Client::getVersion(char * version){
   addStringToTargetMatchList("OK\r\n");
   addStringToTargetMatchList("ERROR\r\n");
 
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+GMR");
   streamPrint("\r\n");
@@ -1814,8 +1684,279 @@ boolean ESP8266_AT_Client::getVersion(uint32_t * version){
 }
 
 boolean ESP8266_AT_Client::restoreDefault(){
+
+  waitForIncomingDataToComplete();
   flushInput();
   streamPrint("AT+RESTORE");
   streamPrint("\r\n");
   return readStreamUntil("ready", 2000);
+}
+
+int16_t ESP8266_AT_Client::streamReadChar(void){
+  if(numIncomingBytesPending > 0){
+    processIncomingAfterColon();
+    return -1;
+  }
+  else {
+    uint8_t b = stream->read();
+    if(updatePlusIpdState(b)){
+      processIncomingUpToColon(); 
+      processIncomingAfterColon(); // try immediately, but don't block
+      return -1; // -1 is distinguishable from consumable data to the caller
+                // because return type is artificially int16_t (not uint16_t)
+    }
+    else{
+      return b;
+    }    
+  }
+}
+
+// this function should be called _exactly_ when an incoming packet detection occurs
+// as understood by the updatePlusIpdState function
+// and therefore, it picks up processing incoming packet data _from the point_ 
+// where +IPD, was received.
+//
+// An incoming packet looks like this: +IPD,####: *****....
+// where #### is an ascii string representation of a number
+// that number tells you how many bytes will be received
+// then you get a colon delimeter
+// then you should get exactly that many bytes reported
+void ESP8266_AT_Client::processIncomingUpToColon(void){
+  // timeout after 500ms of inactivity
+  uint32_t current_time = millis();    
+  uint32_t previous_time = current_time;
+  const int32_t timeout_interval = 500;  // signed for comparison / overflow
+
+  // consume bytes into a local buffer until you get a ':'
+  char num_bytes_str[16] = {0};
+  char num_bytes_write_idx = 0;
+  boolean gotColon = false;
+
+  // treat it as an error if (num_bytes_write_idx == 15) // overflow
+  // or if if (current_time - previous_time >= interval) // timeout
+  // update current_time on an ongoing basis
+  // assign previous_time to current_time anytime a byte is received to prolong timeout
+  while(!gotColon){
+    current_time = millis(); // update current_time on an ongoing basis
+    if(stream->available()){
+      previous_time = current_time;
+      char b = stream->read();
+      if(b == ':'){ 
+        // this is the loop termination criteria
+        // and ':' will _not_ be added to the num_bytes_str buffer
+        gotColon = true;
+      }
+      else if(num_bytes_write_idx < 15){
+        // num_bytes_str[15] is reserved for a null terminator
+        // never allow it to be overwritten, and an attempt is made
+        // treat it as an error and terminate this function        
+        num_bytes_str[num_bytes_write_idx++] = b;
+      }
+      else{
+        // TODO: complain loudly if this happens
+        return; // overflow
+      }
+    }
+    else {      
+      if (current_time - previous_time >= timeout_interval){
+        // TODO: complain loudly if this happens      
+        return; // timeout
+      }
+    }    
+  }
+
+  // if we got to here, we've received a colon and _should_ be able to parse
+  // the contents of num_bytes_str into a number which we can store in num_bytes_expected
+  // lets give it a shot    
+  char * temp;
+  numIncomingBytesPending = strtoul(num_bytes_str, &temp, 10);
+  if (*temp != '\0'){
+    // TODO: complain loudly if this happens
+    numIncomingBytesPending = 0;
+    return; // failed to parse length
+  }
+}
+
+// this function should be the only other one besides streamReadChar that
+// ever calls stream->read()
+// returns true if any bytes were consumed
+boolean ESP8266_AT_Client::processIncomingAfterColon(void){
+  // the job of this function is to read bytes from the hardware serial buffer
+  // if and only if numIncomingBytesPending > 0
+  // it should return as soon as possible
+  boolean ret = false;
+  if(numIncomingBytesPending > 0){
+    if(stream->available()){      
+      uint8_t b = stream->read();
+      if(writeToInputBuffer(b)){
+        ret = true;
+        numIncomingBytesPending--;
+      }
+      else {
+        // TODO: complain _really_ loudly if this happens      
+        numIncomingBytesPending = 0; // the transfer has failed
+        return false; // out of space in application buffer                
+      }
+    }
+  }
+
+  return ret;
+}
+
+// this should get called _before_ any AT communication to the ESP8266
+void ESP8266_AT_Client::waitForIncomingDataToComplete(void){
+  // just calls processIncomingAfterColon in a spin loop, with timeout
+  // timeout after 500ms of inactivity
+  uint32_t current_time = millis();    
+  uint32_t previous_time = current_time;
+  const int32_t timeout_interval = 500;  // signed for comparison / overflow  
+
+  while(numIncomingBytesPending > 0){
+    current_time = millis();
+    boolean gotData = processIncomingAfterColon(); // decrements numIncomingBytesPending
+    if(gotData){
+      previous_time = current_time;
+    }
+    else if (current_time - previous_time >= timeout_interval){
+      // TODO: complain _really_ loudly if this happens
+      // probably the connection is lost
+      socket_connected = false;
+      numIncomingBytesPending = 0; // give up
+      return; // timeout
+    }
+  }
+}
+
+// this self-contained state machine should be called with _every_ incoming byte
+// it returns true if the sequence IPD+, is received
+// when that happens the state machine also resets / clears
+// should also handle CLOSED and UNLINK receipt handling
+// this is implemented using a switch statement acting as a jump table
+// with the intention of it being speedy
+boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){   
+  static char lastCharAccepted = ' ';
+  static uint8_t pursuitString = 0; 
+  static uint8_t pursuitDepth = 0;
+  
+  // pursuitString = 0 is not yet in pursuit
+  // pursuitString = 1 is the pursuit of '+IPD,'
+  // pursuitString = 2 is the pursuit of 'CLOSED'
+  // pursuitString = 3 is the pursuit of 'UNLINK'
+  boolean ret = false;
+  char c = (char) chr;
+
+  switch(pursuitString){
+  case 0: // not yet in pursuit
+    switch(c){
+    case '+': // +IPD,
+      pursuitString = 1; lastCharAccepted = c;
+      break;
+    case 'C': // CLOSED,
+      pursuitString = 2; lastCharAccepted = c;
+      break;
+    case 'U': // UNLINK
+      pursuitString = 3; pursuitDepth = 1; lastCharAccepted = c;
+      break;                
+    }
+    // intentionally leaving out default case here so we don't 
+    // needlessly execute code on every byte received
+    break;
+  case 1: // +IPD,
+    switch(lastCharAccepted){
+    case '+':
+      if(c == 'I') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'I':
+      if(c == 'P') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'P':
+      if(c == 'D') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'D':
+      if(c == ',') ret = true; // this is the only way it can be true
+      // unconditionally clear the state machine after ','
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    default: 
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    }
+    break;
+  case 2: // CLOSED,
+    switch(lastCharAccepted){
+    case 'C':
+      if(c == 'L') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'L':
+      if(c == 'O') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'O':
+      if(c == 'S') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'S':
+      if(c == 'E') { lastCharAccepted = c; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;      
+    case 'E':
+      if(c == 'D'){
+        // handle seeing CLOSED
+        socket_connected = false;
+      }
+      // unconditionally clear the state machine after 'D'
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    default: 
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    }
+    break;    
+  case 3: // UNLINK,
+    switch(lastCharAccepted){
+    case 'U':
+      if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'N':
+      // this is the only slightly wierd case because UNLINK has two N's
+      // and it's therefore also the only reason I keep the pursuitDepth variable
+      // maintaining it also doesn't matter once it increments past 2
+      if(pursuitDepth == 2){ // after the first N in UNLINK
+        if(c == 'L') { lastCharAccepted = c; pursuitDepth++; }
+        else { pursuitString = 0; lastCharAccepted = ' '; }
+      }
+      else if(pursuitDepth == 5){ // after the second N in UNLINK
+        if(c == 'K'){
+          // handle seeing UNLINK
+          socket_connected = false;
+        }
+        // unconditionally clear the state machine after 'K'
+        pursuitString = 0; lastCharAccepted = ' ';
+      }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'L':
+      if(c == 'I') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;
+    case 'I':
+      if(c == 'N') { lastCharAccepted = c; pursuitDepth++; }
+      else { pursuitString = 0; lastCharAccepted = ' '; }
+      break;      
+    default: 
+      pursuitString = 0; lastCharAccepted = ' ';
+      break;
+    }
+    break;
+  default:
+    pursuitString = 0; lastCharAccepted = ' ';
+    break;
+  }
+  
+  return ret;
 }

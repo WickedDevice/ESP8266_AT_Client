@@ -102,7 +102,6 @@ private:
   Stream * stream;      // where AT commands are sent and responses received
   Stream * debugStream; // where Debug messages go
   boolean debugEnabled;
-  enum {WAITING_FOR_IPD, WAITING_FOR_IPD_OR_CLOSED, WAITING_FOR_COLON, PROCESSING_IPD} receive_state;
 
   boolean socket_connected;
   boolean listener_started;
@@ -118,9 +117,17 @@ private:
   uint16_t num_consumed_bytes_in_input_buffer;
   uint16_t num_free_bytes_in_input_buffer;
 
-  uint16_t num_characters_remaining_to_receive;
   char target_match_array[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1];
   char target_match_lengths[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1];
+  
+  void processIncomingUpToColon(void);   // should be called anytime right after you see +IPD,
+  boolean processIncomingAfterColon(void);  // should be called frequently (as in non-blocking implementation), while incoming data is pending
+  uint32_t numIncomingBytesPending = 0;  // this should be counted down to zero by processIncomingAfterColon  
+  boolean updatePlusIpdState(uint8_t c); // anytime a character is received this should be called with that caracter as an argument 
+                                         // returns true if handleIncoming should be called
+  int16_t streamReadChar(void);          // should only be called if it is known that there are bytes available
+                                         // returns (int16_t) -1 if processing was interrupted by +IPD handling
+  void waitForIncomingDataToComplete(void); // just calls processIncomingAfterColon in a spin loop, with timeout
 
   void clearTargetMatchArray(void);
   boolean writeToInputBuffer(uint8_t c);
@@ -139,7 +146,6 @@ private:
   boolean readStreamUntil(char * target_match);
 
   void flushInput();
-  void receive(boolean delegate_received_IPD = 0);
   void ESP8266_DEBUG(char * msg);
   void ESP8266_DEBUG(char * msg, uint16_t value);
   void ESP8266_DEBUG(char * msg, char * value);
