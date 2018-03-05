@@ -690,7 +690,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   boolean wroteData = false;
   boolean gotArrow = false;
 
-  const int32_t interval = 100;
+  int32_t interval = 100;
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
 
@@ -775,7 +775,19 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   // Enter transparent transmission, with a 20-ms
   // interval between each packet, and a maximum of
   // 2048 bytes per packet.
-  delay(25); // minimum 20ms, lets be generous
+  
+  // delay(25); // minimum 20ms, lets be generous
+  // but we can't _actually_ do delay, because 
+  // our send _may_ have inspired a flood of incoming
+  // packet data, i.e. if we ar downloading a file
+  // so we need to handle incoming traffic while we wait
+  interval = 25;
+  current_millis = millis();
+  previous_millis = current_millis;
+  while(current_millis - previous_millis < interval){
+    current_millis = millis();
+    flushInput(); // this should handle incoming traffic
+  }
 
   // should return the number of bytes written
   return ret;
@@ -787,25 +799,9 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
 int ESP8266_AT_Client::available(){
   // an intent to read() is always preceded by a call to available(),
   // if the caller knows what is good for them,
-  // so this is where we need to perform asynchronous receipt of +IPD data
-  uint16_t bytesAvailable = stream->available();
-  if(bytesAvailable > ESP8266_AT_Client::bytesAvailableMax){
-    ESP8266_AT_Client::bytesAvailableMax = bytesAvailable;
-  }
-
-#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)            
-  if(bytesAvailable > 50){
-    // TODO: complain loudly if this happens 
-    Serial.println("PANIC13");      
-    printDebugWindow();
-  }        
-#endif    
-
-  if(bytesAvailable > 0){
-    while(stream->available()){    
-      streamReadChar();
-    }
-  }
+  // so this is where we need to perform asynchronous receipt of +IPD data  
+  flushInput(); // obviously nobody is waiting for AT command responses
+                // so consume them bytes
 
   return num_consumed_bytes_in_input_buffer;
 }
@@ -1191,14 +1187,14 @@ uint8_t ESP8266_AT_Client::connected(boolean actively_check){
   uint8_t ret = 1; // assume we are connected
   char numeric_value = 0;
 
+  flushInput(); 
+
   if(actively_check){ // things seem go bad if you do this in a tight loop
     // set up an AT command and send it
     // then return whether or not it succeeded
     // you have to get "STATUS:" and a numeric code ('4' means disconnected)
     // then you have *may* get "+CIPSTATUS:"
     // then you get "OK"
-    waitForIncomingDataToComplete();
-    flushInput();
 
     ok_flag = false;
     error_flag = false;
