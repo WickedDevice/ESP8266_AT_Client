@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 #include <Client.h>
+#include <Stream.h>
+#include <Print.h>
 
 #define ESP8266_AT_CLIENT_MAX_STRING_LENGTH      (32)
 #define ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES (5)
@@ -95,79 +97,68 @@ public:
   boolean getVersion(uint32_t * version);
   boolean restoreDefault();
 
+  boolean AT(void);
+
   operator bool();
 
   boolean addStringToTargetMatchList(char * str);
 private:
-  Stream * stream;      // where AT commands are sent and responses received
+  Stream * stream;       // where AT commands are sent and responses received
+  Print * streamAsPrint; // in order to check for available space in output buffer
   Stream * debugStream; // where Debug messages go
   boolean debugEnabled;
-  enum {WAITING_FOR_IPD, WAITING_FOR_IPD_OR_CLOSED, WAITING_FOR_COLON, PROCESSING_IPD} receive_state;
 
   boolean socket_connected;
+  boolean wifi_is_connected;
   boolean listener_started;
+  boolean ok_flag;
+  boolean ready_flag;
+  boolean error_flag;
+  boolean send_ok_flag;
+
   esp8266_connect_proto_t socket_type;
   uint16_t tcp_keep_alive_interval_seconds;
 
   uint8_t enable_pin;
   uint8_t * input_buffer;
   uint16_t input_buffer_length;
-  uint8_t * input_buffer_read_ptr;
-  uint8_t * input_buffer_write_ptr;
-  uint8_t * input_buffer_tail_ptr;
+  uint16_t input_buffer_read_idx;
+  uint16_t input_buffer_write_idx;
+
   uint16_t num_consumed_bytes_in_input_buffer;
   uint16_t num_free_bytes_in_input_buffer;
-
-  uint16_t num_characters_remaining_to_receive;
-  char target_match_array[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1][ESP8266_AT_CLIENT_MAX_STRING_LENGTH + 1];
-  char target_match_lengths[ESP8266_AT_CLIENT_MAX_NUM_TARGET_MATCHES + 1];
-
-  void clearTargetMatchArray(void);
+  
+  void processIncomingUpToColon(void);   // should be called anytime right after you see +IPD,
+  boolean processIncomingAfterColon(void);  // should be called frequently (as in non-blocking implementation), while incoming data is pending
+  int32_t numIncomingBytesPending = 0;  // this should be counted down to zero by processIncomingAfterColon  
+  boolean updatePlusIpdState(uint8_t c); // anytime a character is received this should be called with that caracter as an argument 
+                                         // returns true if handleIncoming should be called
+  int16_t streamReadChar(void);          // should only be called if it is known that there are bytes available
+                                         // returns (int16_t) -1 if processing was interrupted by +IPD handling
+  void waitForIncomingDataToComplete(void); // just calls processIncomingAfterColon in a spin loop, with timeout
+  
+  size_t streamWrite(const char * str);
+  size_t streamWrite(uint32_t value);
+  size_t streamWrite(int32_t value);
+  size_t streamWrite(const uint8_t *buf, size_t sz); // write a buffer of known size to the stream
+  
   boolean writeToInputBuffer(uint8_t c);
-  uint8_t readFromInputBuffer(void);
+  int16_t readFromInputBuffer(void);
   void parseScanResult(ap_scan_result_t * result, char * line);
 
-  boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx);
-  boolean readStreamUntil(uint8_t * match_idx, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
-  boolean readStreamUntil(uint8_t * match_idx, int32_t timeout_ms);
-  boolean readStreamUntil(uint8_t * match_idx);
-
-  boolean readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms, boolean reset_timeout_on_possible_rx);
-  boolean readStreamUntil(char * target_match, char * target_buffer, uint16_t target_buffer_length, int32_t timeout_ms);
-  boolean readStreamUntil(char * target_match, int32_t timeout_ms, boolean reset_timeout_on_possible_rx);
-  boolean readStreamUntil(char * target_match, int32_t timeout_ms);
-  boolean readStreamUntil(char * target_match);
-
   void flushInput();
-  void receive(boolean delegate_received_IPD = 0);
   void ESP8266_DEBUG(char * msg);
   void ESP8266_DEBUG(char * msg, uint16_t value);
   void ESP8266_DEBUG(char * msg, char * value);
-
-  void streamPrint(const __FlashStringHelper *);
-  void streamPrint(const String &);
-  void streamPrint(const char[]);
-  void streamPrint(char);
-  void streamPrint(unsigned char, int = DEC);
-  void streamPrint(int, int = DEC);
-  void streamPrint(unsigned int, int = DEC);
-  void streamPrint(long, int = DEC);
-  void streamPrint(unsigned long, int = DEC);
-  void streamPrint(double, int = 2);
-  void streamPrint(const Printable&);
-
-  void streamPrintln(const __FlashStringHelper *);
-  void streamPrintln(const String &s);
-  void streamPrintln(const char[]);
-  void streamPrintln(char);
-  void streamPrintln(unsigned char, int = DEC);
-  void streamPrintln(int, int = DEC);
-  void streamPrintln(unsigned int, int = DEC);
-  void streamPrintln(long, int = DEC);
-  void streamPrintln(unsigned long, int = DEC);
-  void streamPrintln(double, int = 2);
-  void streamPrintln(const Printable&);
-  void streamPrintln(void);
+  
+  static uint8_t* debug_read_window;
+  static uint16_t debug_read_window_index;
+  static uint8_t* debug_write_window;
+  static uint16_t debug_write_window_index;
+  static void printDebugWindow(void);
+  static void addToDebugReadWindow(uint8_t b);
+  static void addToDebugWriteWindow(uint8_t b);
+  static uint16_t bytesAvailableMax;
 };
 
 #endif
