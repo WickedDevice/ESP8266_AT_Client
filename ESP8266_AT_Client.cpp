@@ -1889,9 +1889,9 @@ boolean ESP8266_AT_Client::firmwareUpdateBegin(){
 
     if(stream->available() > 0){
       int16_t b = streamReadChar();
-      if(b > 0){
+      if(b > 0){        
         previous_millis = current_millis;     
-        // mini-state machine looking for +CIPUPDATE:1 
+        // mini-state machine looking for +CIPUPDATE:1
         //                                0123456789ab
         switch(last_character_received){
         case ' ': 
@@ -1968,14 +1968,17 @@ boolean ESP8266_AT_Client::firmwareUpdateStatus(uint8_t * status){
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
   boolean timeout_flag = false;
-  while(!error_flag && !ok_flag && !timeout_flag){
+  ok_flag = false;
+  error_flag = false;  
+  ready_flag = false;
+
+  while(!error_flag && !ok_flag && !ready_flag && !timeout_flag){
     current_millis = millis();
 
     if(stream->available() > 0){
       int16_t b = streamReadChar();
       if(b > 0){
-        previous_millis = current_millis;      
-        Serial.write(b);
+        previous_millis = current_millis;              
       }          
     }
 
@@ -2132,7 +2135,7 @@ boolean ESP8266_AT_Client::restoreDefault(){
     if(stream->available() > 0){
       int16_t b = streamReadChar();
       if(b > 0){
-        previous_millis = current_millis;      
+        previous_millis = current_millis;         
       }          
     }
 
@@ -2144,6 +2147,8 @@ boolean ESP8266_AT_Client::restoreDefault(){
 #endif
     }  
   }
+
+  return ready_flag;
 }
 
 boolean ESP8266_AT_Client::AT(void){
@@ -2887,7 +2892,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       break; 
     }   
     break; 
-  case 8: // ready\r\n
+  case 8: // ready
     switch(lastCharAccepted){
     case 'r':
       if(c == 'e') { lastCharAccepted = c; }
@@ -2902,15 +2907,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
       else { pursuitString = 0; }
       break;            
     case 'd':
-      if(c == 'y') { lastCharAccepted = c; }
-      else { pursuitString = 0; }
-      break;
-    case 'y':
-      if(c == '\r') { lastCharAccepted = c; }
-      else { pursuitString = 0; }
-      break;      
-    case '\r':
-      if(c == '\n'){
+      if(c == 'y'){
         // Serial.print('!');
         // this is a goal state
         ready_flag = true;    
@@ -2918,7 +2915,7 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
 
       // unconditionally clear the state machine after 'y'
       pursuitString = 0;    
-      break;      
+      break;
     default:
       pursuitString = 0;
       break;
