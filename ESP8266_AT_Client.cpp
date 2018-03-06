@@ -376,7 +376,8 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
   boolean ret = false;
   char mac_str[18] = {0};
   macArrayToString(mac_address, (char *) mac_str);
-
+  boolean timeout_flag = false;
+  
   if(strlen(mac_str) == 17){ // e.g. 00:04:4a:23:11:7b
     waitForIncomingDataToComplete();    
     flushInput();
@@ -389,8 +390,7 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
 
     const int32_t interval = 5000;
     uint32_t current_millis = millis();
-    uint32_t previous_millis = current_millis;
-    boolean timeout_flag = false;
+    uint32_t previous_millis = current_millis;    
     while(!error_flag && !ok_flag && !timeout_flag){
       current_millis = millis();
 
@@ -403,7 +403,7 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
 
       if (current_millis - previous_millis >= interval) {
         timeout_flag = true;
-#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)        
+#if defined(ESP8266_AT_CLIENT_ENABLE_PANIC_MESSAGES)
         Serial.println("PANIC7");
         printDebugWindow();
 #endif
@@ -414,7 +414,7 @@ boolean ESP8266_AT_Client::setMacAddress(uint8_t * mac_address){
       }
     }    
   }
-  
+
   return ret;
 }
 
@@ -1884,7 +1884,7 @@ boolean ESP8266_AT_Client::firmwareUpdateBegin(){
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
   boolean timeout_flag = false;
-  while(!error_flag && !timeout_flag){
+  while(!error_flag && !timeout_flag && !got_plus_cipupdate_colon_1){
     current_millis = millis();
 
     if(stream->available() > 0){
@@ -1898,42 +1898,45 @@ boolean ESP8266_AT_Client::firmwareUpdateBegin(){
           if(b == '+'){ last_character_received = b; pursuit_depth = 1; }   
           break;     
         case '+':
-          if(b == 'C'){ last_character_received = b; pursuit_depth ++; }        
+          if(b == 'C'){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
           break;
         case 'C':
-          if(b == 'I'){ last_character_received = b; pursuit_depth ++; }        
+          if(b == 'I'){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
           break;    
         case 'I':
-          if(b == 'P'){ last_character_received = b; pursuit_depth ++; }        
+          if(b == 'P'){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
-          break;    
+          break;  
         case 'P':
-          if((b == 'U') && (pursuit_depth == 4)){ last_character_received = b; pursuit_depth ++; }        
-          else if((b == 'D') && (pursuit_depth == 6)){ last_character_received = b; pursuit_depth ++; }        
+          if((b == 'U') && (pursuit_depth == 4)){ last_character_received = b; pursuit_depth++; }        
+          else if((b == 'D') && (pursuit_depth == 6)){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
-          break;     
+          break; 
+        case 'U':
+          if(b == 'P'){ last_character_received = b; pursuit_depth++; }        
+          else { last_character_received = ' '; }
+          break;                  
         case 'D':
-          if(b == 'A'){ last_character_received = b; pursuit_depth ++; }        
+          if(b == 'A'){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
           break;    
         case 'A':
-          if(b == 'T'){ last_character_received = b; pursuit_depth ++; }        
+          if(b == 'T'){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
           break;    
         case 'T':
-          if(b == 'E'){ last_character_received = b; pursuit_depth ++; }        
+          if(b == 'E'){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
           break;    
         case 'E':
-          if(b == ':'){ last_character_received = b; pursuit_depth ++; }        
+          if(b == ':'){ last_character_received = b; pursuit_depth++; }        
           else { last_character_received = ' '; }
           break;    
         case ':':
           if(b == '1'){ 
             got_plus_cipupdate_colon_1 = true;
-            break;
           }        
           last_character_received = ' '; // unconditional, goal state
           break;                                                      
@@ -1950,7 +1953,7 @@ boolean ESP8266_AT_Client::firmwareUpdateBegin(){
 #endif
     }  
   }  
-
+  
   return got_plus_cipupdate_colon_1;
 }
 
@@ -1972,6 +1975,7 @@ boolean ESP8266_AT_Client::firmwareUpdateStatus(uint8_t * status){
       int16_t b = streamReadChar();
       if(b > 0){
         previous_millis = current_millis;      
+        Serial.write(b);
       }          
     }
 
@@ -2842,27 +2846,18 @@ boolean ESP8266_AT_Client::updatePlusIpdState(uint8_t chr){
                                     //                       01234 5 6                               
         if(c == 'O') { lastCharAccepted = c; pursuitDepth++; }
         else { pursuitString = 0; }
-      }                             //                             v
-      else if(pursuitDepth == 0x5){ // after the first R in 'ERROR\r\n'
-                                    //                       01234 5 6                               
-        if(c == '\r') { lastCharAccepted = c; pursuitDepth++; }
-        else { pursuitString = 0; }
       }
       else { pursuitString = 0; }
     case 'O':
-      if(c == 'R') { lastCharAccepted = c;  pursuitDepth++; }
-      else { pursuitString = 0; }
-      break;
-    case '\r':
-      if(c == '\n'){
+      if(c == 'R'){
         // Serial.print('!');
-        // this is a goal state     
+        // this is a goal sta'te     
         error_flag = true;
       }
 
-      // unconditionally clear the state machine after second 'R'
+      // unconditionally clear the state machine after third 'R'
       pursuitString = 0;    
-      break;         
+      break;      
     default:
       pursuitString = 0;
       break;
