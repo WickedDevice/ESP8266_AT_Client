@@ -690,7 +690,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   boolean wroteData = false;
   boolean gotArrow = false;
 
-  int32_t interval = 100;
+  int32_t interval = 5000;
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
 
