@@ -690,7 +690,7 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
   boolean wroteData = false;
   boolean gotArrow = false;
 
-  int32_t interval = 5000;
+  int32_t interval = 2000;
   uint32_t current_millis = millis();
   uint32_t previous_millis = current_millis;
 
@@ -761,7 +761,8 @@ size_t ESP8266_AT_Client::write(const uint8_t *buf, size_t sz){
 
   // don't leave the ESP hanging waiting for data
   if((ret < sz) && timeout_flag){
-    ret = streamWrite(buf + ret, sz - ret); 
+    streamWrite(buf + ret, sz - ret); 
+    ret = 0; // mark a failure
     // so if ret = 0 it does streamWrite(buf, sz);
     // if ret = sz - 1 it does streamWrite(&buf[sz-1], 1);
     // and everything in between
